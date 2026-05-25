@@ -1,0 +1,17 @@
+.env
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Local RAG storage
+data/
+
+# OS/editor files
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
