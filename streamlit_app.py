@@ -140,14 +140,6 @@ def next_navigation_mode(mode: str) -> str:
     return "Top row"
 
 
-def navigation_icon(mode: str) -> str:
-    if mode == "Sidebar":
-        return ":material/vertical_split:"
-    if mode == "Both":
-        return ":material/dashboard:"
-    return ":material/menu:"
-
-
 def active_voice_language() -> str:
     language = st.session_state.get("voice_language", settings.default_voice_language)
     return language if language in VOICE_LANGUAGE_OPTIONS else "Auto"
@@ -348,6 +340,27 @@ def inject_enterprise_styles() -> None:
             z-index: 1001;
         }
 
+        [data-testid="stIconMaterial"],
+        span[class*="material-symbols"],
+        span[class*="material-icons"],
+        i[class*="material-icons"] {
+            display: none !important;
+        }
+
+        [data-testid="stSidebarCollapsedControl"] button::before,
+        [data-testid="collapsedControl"] button::before,
+        button[title="View sidebar"]::before,
+        button[title="Hide sidebar"]::before {
+            content: "";
+            display: block;
+            width: 1rem;
+            height: 0.72rem;
+            background:
+                linear-gradient(var(--rag-text), var(--rag-text)) 0 0 / 100% 2px no-repeat,
+                linear-gradient(var(--rag-text), var(--rag-text)) 0 50% / 100% 2px no-repeat,
+                linear-gradient(var(--rag-text), var(--rag-text)) 0 100% / 100% 2px no-repeat;
+        }
+
         [data-testid="stSidebar"] {
             border-right: 1px solid var(--rag-border);
             background: linear-gradient(180deg, #121821 0%, #0f141b 100%);
@@ -455,6 +468,17 @@ def inject_enterprise_styles() -> None:
             font-size: 0 !important;
         }
 
+        .st-key-navigation_mode_cycle button::before {
+            content: "";
+            display: block;
+            width: 1.05rem;
+            height: 0.72rem;
+            background:
+                linear-gradient(var(--rag-text), var(--rag-text)) 0 0 / 100% 2px no-repeat,
+                linear-gradient(var(--rag-text), var(--rag-text)) 0 50% / 100% 2px no-repeat,
+                linear-gradient(var(--rag-text), var(--rag-text)) 0 100% / 100% 2px no-repeat;
+        }
+
         .st-key-navigation_mode_cycle button span {
             font-size: 1.1rem !important;
         }
@@ -474,6 +498,52 @@ def inject_enterprise_styles() -> None:
             border-color: var(--rag-border);
             font-size: 0.78rem;
             font-weight: 700;
+            position: relative;
+            padding-right: 2.1rem;
+        }
+
+        [data-baseweb="select"] > div {
+            position: relative;
+            padding-right: 2.1rem;
+        }
+
+        [data-baseweb="select"] > div::after {
+            content: "";
+            position: absolute;
+            right: 0.85rem;
+            top: 50%;
+            width: 0.45rem;
+            height: 0.45rem;
+            border-right: 2px solid var(--rag-muted);
+            border-bottom: 2px solid var(--rag-muted);
+            transform: translateY(-65%) rotate(45deg);
+            pointer-events: none;
+        }
+
+        [data-testid="stExpander"] details > summary {
+            position: relative;
+            padding-left: 2.25rem !important;
+        }
+
+        [data-testid="stExpander"] details > summary::before {
+            content: "";
+            position: absolute;
+            left: 0.85rem;
+            top: 50%;
+            width: 0;
+            height: 0;
+            border-top: 0.28rem solid transparent;
+            border-bottom: 0.28rem solid transparent;
+            border-left: 0.42rem solid var(--rag-muted);
+            transform: translateY(-50%);
+            pointer-events: none;
+        }
+
+        [data-testid="stExpander"] details[open] > summary::before {
+            border-left: 0.28rem solid transparent;
+            border-right: 0.28rem solid transparent;
+            border-top: 0.42rem solid var(--rag-muted);
+            border-bottom: 0;
         }
 
         .breadcrumb {
@@ -1217,7 +1287,6 @@ def render_navigation_menu() -> None:
     mode = active_navigation_mode()
     if st.button(
         "Navigation layout",
-        icon=navigation_icon(mode),
         key="navigation_mode_cycle",
         help=f"Current: {mode}. Click to switch to {next_navigation_mode(mode)}.",
         use_container_width=True,
