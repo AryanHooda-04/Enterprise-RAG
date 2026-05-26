@@ -25,16 +25,45 @@ flowchart LR
     B --> C[Chunk with tiktoken]
     C --> D[Create OpenAI embeddings]
     D --> E[Store vectors in FAISS]
-    E --> F[Embed user question]
-    F --> G[Retrieve top-k chunks]
-    G --> H[Build grounded prompt or agent plan]
-    H --> I[Generate LLM answer or report]
-    I --> J[Show citations, feedback, and exports]
+    E --> F[User question or agent goal]
+    F --> G{Experience}
+    G --> H[Ask or Conversation]
+    G --> I[Agentic RAG]
+    H --> J[Embed query and retrieve top-k chunks]
+    I --> K{Choose tool}
+    K --> L[Search documents]
+    K --> M[Summarize documents]
+    K --> N[Compare documents]
+    K --> O[Generate report]
+    L --> P[Collect cited evidence]
+    M --> P
+    N --> P
+    O --> P
+    J --> P
+    P --> Q[Build grounded prompt]
+    Q --> R[Generate answer or report]
+    R --> S[Show citations, evidence chart, feedback, and exports]
 ```
 
 The local knowledge index is stored under `data/index/<embedding-model>/`.
 FAISS keeps the numerical vectors in `index.faiss`, while `chunks.json` and
 `documents.json` keep the source text and metadata needed for citations.
+
+## Agentic Mode
+
+The `Agent` workspace turns the standard RAG flow into a small tool-using
+assistant. Instead of only answering a single question, it reads the user's goal
+and selects an internal workflow:
+
+- `Search Documents`: retrieve the most relevant chunks and answer directly.
+- `Summarize Documents`: use selected document context to produce a cited summary.
+- `Compare Documents`: compare two or more selected documents with evidence.
+- `Generate Report`: produce a Markdown report and downloadable PDF report.
+
+Agent mode still uses the same grounded retrieval layer, source metadata, and
+citations as Ask and Conversation. It adds an agent plan, evidence table,
+Plotly evidence chart, Markdown export, and PDF export for resume-ready
+agentic RAG demonstrations.
 
 ## Project Structure
 
