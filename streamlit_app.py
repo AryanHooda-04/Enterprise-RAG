@@ -815,6 +815,18 @@ def inject_enterprise_styles() -> None:
             margin-top: 0.45rem;
         }
 
+        .st-key-ask_new_chat button,
+        .st-key-conversation_new_chat button {
+            min-width: 6.5rem;
+            white-space: nowrap;
+            justify-content: center;
+        }
+
+        .st-key-ask_new_chat button p,
+        .st-key-conversation_new_chat button p {
+            white-space: nowrap;
+        }
+
         .source-meta {
             color: var(--rag-muted);
             font-size: 0.8rem;
@@ -2429,7 +2441,7 @@ def render_ask() -> None:
             tts_voice=voice_settings["tts_voice"],
         )
 
-        action_left, action_new = st.columns([1, 0.14], gap="small")
+        action_left, action_new = st.columns([1, 0.2], gap="small")
         with action_left:
             st.markdown(
                 f"""
@@ -2703,7 +2715,7 @@ def render_conversation() -> None:
             tts_voice=voice_settings["tts_voice"],
         )
 
-        action_left, action_new, action_export_md, action_export_json = st.columns([1, 0.14, 0.18, 0.16], gap="small")
+        action_left, action_new, action_export_md, action_export_json = st.columns([1, 0.2, 0.18, 0.16], gap="small")
         with action_left:
             st.markdown(
                 f"""
