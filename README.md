@@ -25,7 +25,7 @@ flowchart LR
     B --> C[Chunk with tiktoken]
     C --> D[Create OpenAI embeddings]
     D --> E[Store vectors in FAISS]
-    E --> F[User question or agent goal]
+    E --> F[Text or voice question / agent goal]
     F --> G{Experience}
     G --> H[Ask or Conversation]
     G --> I[Agentic RAG]
@@ -61,9 +61,9 @@ and selects an internal workflow:
 - `Generate Report`: produce a Markdown report and downloadable PDF report.
 
 Agent mode still uses the same grounded retrieval layer, source metadata, and
-citations as Ask and Conversation. It adds an agent plan, evidence table,
-Plotly evidence chart, Markdown export, and PDF export for resume-ready
-agentic RAG demonstrations.
+citations as Ask and Conversation. It adds text or voice goals, spoken answers,
+an agent plan, evidence table, Plotly evidence chart, Markdown export, and PDF
+export for resume-ready agentic RAG demonstrations.
 
 ## Project Structure
 
@@ -135,7 +135,7 @@ The enterprise UI is organized into:
 - `Dashboard`: index readiness, document volume, session activity, governance markers.
 - `Ask`: streaming source-grounded answers with text or voice input, spoken answers, hybrid search, source filters, feedback buttons, source previews, chat model, knowledge index, Top K, and similarity threshold controls.
 - `Conversation`: streaming multi-turn RAG chat with text or voice turns, retained context, citations, spoken answers, source filters, feedback buttons, and Markdown/JSON export.
-- `Agent`: agentic RAG workflow that selects search, summarize, compare, or report tools; shows the plan, evidence chart, citations, Markdown export, and PDF report export.
+- `Agent`: agentic RAG workflow with text or voice goals and spoken answers; selects search, summarize, compare, or report tools; shows the plan, evidence chart, citations, Markdown export, and PDF report export.
 - `Ingestion`: multi-file and folder upload with embedding model, vision model, chunking controls, queued/indexing/completed/failed statuses, and retry.
 - `Retrieval Audit`: semantic-search inspection before answer generation.
 - `Documents`: filterable inventory with CSV export.
@@ -147,9 +147,10 @@ The app opens to a login screen before the dashboard. Built-in local users are
 manage indexes, and run admin diagnostics. `User` can ask questions, use
 conversation mode, audit retrieval, and view documents.
 
-Voice input and output are available to both roles. Pick `Auto`, `English`, or
-`Hindi` from the Voice controls for demo use. `Auto` detects the spoken question
-language, and answers are prompted to remain in that user language.
+Voice input and output are available to both roles in Ask, Conversation, and
+Agent mode. Pick `Auto`, `English`, or `Hindi` from the Voice controls for demo
+use. `Auto` detects the spoken question or agent goal language, and answers are
+prompted to remain in that user language.
 
 Ask and Conversation support `Hybrid`, `Semantic`, and `Keyword` retrieval
 modes. Hybrid search combines FAISS semantic matches with a local BM25-style

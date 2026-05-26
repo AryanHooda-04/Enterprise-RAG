@@ -1690,6 +1690,18 @@ def reset_conversation_chat() -> None:
     st.session_state.conversation_session_id = uuid4().hex
 
 
+def reset_agent_workspace() -> None:
+    for key in (
+        "agent_goal",
+        "agent_voice_review",
+        "agent_transcript",
+        "agent_transcript_language",
+        "agent_audio_hash",
+        "last_agent_result",
+    ):
+        st.session_state.pop(key, None)
+
+
 def follow_up_filters(
     query: str,
     filters: dict | None,
@@ -2251,6 +2263,7 @@ def run_agentic_rag(
     top_k: int,
     min_score: float,
     search_mode: str,
+    response_language_name: str,
 ) -> dict:
     runtime_settings = active_settings(chat_model=chat_model, embedding_model=embedding_model)
     store = get_vector_store(embedding_model)
@@ -2284,7 +2297,7 @@ def run_agentic_rag(
             embedding_model=embedding_model,
             top_k=top_k,
             min_score=min_score,
-            response_language_name="English",
+            response_language_name=response_language_name,
             filters=filters,
             search_mode=search_mode,
         )
@@ -2334,7 +2347,9 @@ def run_agentic_rag(
 
     agent_prompt = agent_prompt_for_tool(tool_name, goal, selected_names)
     answer_parts: list[str] = []
-    for delta in pipeline.stream_answer(pipeline.build_prompt(agent_prompt, chunks, response_language="English")):
+    for delta in pipeline.stream_answer(
+        pipeline.build_prompt(agent_prompt, chunks, response_language=response_language_name)
+    ):
         answer_parts.append(delta)
     answer = "".join(answer_parts).strip() or "I don't know"
     result = pipeline.result_from_answer(answer, chunks)
@@ -3747,7 +3762,7 @@ def render_agent() -> None:
 
     with st.container(border=True, key="agent_settings"):
         with st.expander("Agent controls", expanded=False):
-            model_col, tool_col, retrieval_col = st.columns([1, 1, 1], gap="large")
+            model_col, tool_col, retrieval_col, voice_col = st.columns([1, 1, 1, 1], gap="large")
             with model_col:
                 chat_model = model_selectbox(
                     "Answer model",
@@ -3788,6 +3803,33 @@ def render_agent() -> None:
                 runtime_settings = active_settings(chat_model=chat_model, embedding_model=embedding_model)
                 top_k = st.slider("Top K", 1, 20, runtime_settings.top_k, key="agent_top_k")
                 min_score = st.slider("Minimum score", 0.0, 1.0, 0.0, step=0.01, key="agent_min_score")
+            with voice_col:
+                st.subheader("Voice")
+                voice_settings = render_voice_settings("agent", compact=True)
+
+    runtime_settings = active_settings(
+        chat_model=chat_model,
+        embedding_model=embedding_model,
+        transcription_model=voice_settings["transcription_model"],
+        tts_model=voice_settings["tts_model"],
+        tts_voice=voice_settings["tts_voice"],
+    )
+
+    render_voice_input(
+        "agent",
+        "Speak your agent goal",
+        voice_settings,
+        runtime_settings,
+        target_text_key="agent_voice_review",
+    )
+    voice_goal = ""
+    if st.session_state.get("agent_voice_review"):
+        voice_goal = st.text_area(
+            "Review voice goal",
+            key="agent_voice_review",
+            height=90,
+        )
+        st.caption("The agent will use the typed goal first, otherwise it will use this voice transcript.")
 
     goal = st.text_area(
         "Agent goal",
@@ -3795,7 +3837,8 @@ def render_agent() -> None:
         height=110,
         placeholder="Example: Compare the Heidi and Black Beauty documents and generate a short report with citations.",
     )
-    inferred_focus_documents = infer_agent_document_hashes(goal, store.documents) if goal.strip() else []
+    active_goal = goal.strip() or voice_goal.strip()
+    inferred_focus_documents = infer_agent_document_hashes(active_goal, store.documents) if active_goal else []
     effective_focus_documents = unique_hashes(selected_documents + inferred_focus_documents)
     if inferred_focus_documents and not selected_documents:
         st.caption(f"Auto inferred focus documents: {describe_documents(inferred_focus_documents, document_options)}")
@@ -3808,17 +3851,16 @@ def render_agent() -> None:
     run_clicked = run_col.button(
         "Run agent",
         type="primary",
-        disabled=not goal.strip() or compare_blocked,
+        disabled=not active_goal or compare_blocked,
         use_container_width=True,
     )
-    if clear_col.button("Clear", use_container_width=True):
-        st.session_state.last_agent_result = None
-        st.rerun()
+    clear_col.button("Clear", use_container_width=True, on_click=reset_agent_workspace)
 
     if run_clicked:
+        answer_language = response_language(voice_settings["language"], active_goal)
         with st.status("Planning tool call and gathering evidence", expanded=True):
             agent_result = run_agentic_rag(
-                goal=goal.strip(),
+                goal=active_goal,
                 requested_tool=requested_tool,
                 chat_model=chat_model,
                 embedding_model=embedding_model,
@@ -3826,12 +3868,15 @@ def render_agent() -> None:
                 top_k=top_k,
                 min_score=min_score,
                 search_mode=str(search_mode).lower(),
+                response_language_name=answer_language,
             )
+        agent_result["voice_settings"] = voice_settings
+        agent_result["answer_language"] = answer_language
         st.session_state.last_agent_result = agent_result
         st.session_state.agent_history.append(
             {
                 "time": datetime.now().strftime("%H:%M:%S"),
-                "goal": goal.strip(),
+                "goal": active_goal,
                 "tool": AGENT_TOOL_LABELS.get(agent_result["tool"], agent_result["tool"]),
                 "confidence": agent_result["result"].get("confidence", 0.0),
                 "sources": len(agent_result["result"].get("sources", [])),
@@ -3867,6 +3912,13 @@ def render_agent() -> None:
     st.subheader("Agent Answer")
     st.markdown(last["answer"])
     render_answer_quality(result, min_score)
+    render_spoken_answer(
+        last["answer"],
+        last.get("voice_settings", voice_settings),
+        last["runtime_settings"],
+        language=last.get("answer_language", response_language(voice_settings["language"], last["answer"])),
+        key_prefix="agent_answer",
+    )
 
     evidence_tab, report_tab, citations_tab, history_tab = st.tabs(
         ["Evidence", "Report", "Citations", "History"]
