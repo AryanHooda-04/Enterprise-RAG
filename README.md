@@ -5,6 +5,14 @@ TXT, DOCX, and image uploads, extracts text and visual descriptions, chunks by
 token count, creates OpenAI embeddings, stores vectors locally in FAISS, and
 answers questions using retrieved context.
 
+## Live App
+
+Access the deployed Streamlit Community Cloud app here:
+
+```text
+https://enterprise-rag-vbhjbfxe6xrewsvnudhuoi.streamlit.app/
+```
+
 ## Project Structure
 
 ```text
