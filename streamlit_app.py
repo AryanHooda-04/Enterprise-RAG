@@ -739,6 +739,76 @@ def inject_enterprise_styles() -> None:
             margin-bottom: 0.55rem;
         }
 
+        .st-key-conversation_chat_shell {
+            max-width: 980px;
+            margin: 0 auto;
+        }
+
+        .conversation-action-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 0.75rem;
+            margin: 0.2rem 0 0.8rem;
+        }
+
+        .conversation-action-title {
+            color: var(--rag-text);
+            font-size: 0.95rem;
+            font-weight: 800;
+        }
+
+        .conversation-action-meta {
+            color: var(--rag-muted);
+            font-size: 0.78rem;
+            margin-top: 0.12rem;
+        }
+
+        .conversation-empty-state {
+            min-height: 18rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            color: var(--rag-muted);
+            border: 1px dashed var(--rag-border);
+            border-radius: 8px;
+            background: rgba(23, 29, 38, 0.34);
+            padding: 2rem;
+            margin: 1rem 0;
+        }
+
+        .conversation-empty-title {
+            color: var(--rag-text);
+            font-size: 1.25rem;
+            font-weight: 800;
+            margin-bottom: 0.35rem;
+        }
+
+        .st-key-conversation_settings {
+            border-color: var(--rag-border) !important;
+            background: rgba(23, 29, 38, 0.72);
+            border-radius: 8px;
+            margin-bottom: 0.9rem;
+        }
+
+        .st-key-conversation_chat_shell [data-testid="stChatMessage"] {
+            border-bottom: 1px solid rgba(168, 176, 188, 0.12);
+            padding: 1rem 0;
+        }
+
+        .st-key-conversation_chat_shell [data-testid="stChatMessage"]:last-of-type {
+            border-bottom: 0;
+        }
+
+        .st-key-conversation_chat_shell [data-testid="stChatMessage"] [data-testid="stMarkdownContainer"] {
+            line-height: 1.55;
+        }
+
+        .st-key-conversation_chat_shell [data-testid="stChatMessage"] [data-testid="stExpander"] {
+            margin-top: 0.45rem;
+        }
+
         .source-meta {
             color: var(--rag-muted);
             font-size: 0.8rem;
@@ -877,8 +947,9 @@ def model_selectbox(
     )
 
 
-def render_voice_settings(prefix: str) -> dict:
-    st.subheader("Voice")
+def render_voice_settings(prefix: str, *, compact: bool = False) -> dict:
+    if not compact:
+        st.subheader("Voice")
     language = st.selectbox(
         "Input/output language",
         VOICE_LANGUAGE_OPTIONS,
@@ -904,23 +975,43 @@ def render_voice_settings(prefix: str) -> dict:
     )
     st.session_state.tts_voice = voice
 
-    with st.expander("Audio models"):
-        transcription_model = st.selectbox(
-            "Speech-to-text",
-            AUDIO_TRANSCRIPTION_MODEL_OPTIONS,
-            index=option_index(AUDIO_TRANSCRIPTION_MODEL_OPTIONS, active_transcription_model()),
-            key=f"{prefix}_transcription_model",
-        )
-        tts_model = st.selectbox(
-            "Text-to-speech",
-            TTS_MODEL_OPTIONS,
-            index=option_index(TTS_MODEL_OPTIONS, active_tts_model()),
-            key=f"{prefix}_tts_model",
-            disabled=not spoken_answer,
-        )
+    audio_model_context = st.container() if compact else st.expander("Audio models")
+    with audio_model_context:
+        if compact:
+            model_col_a, model_col_b = st.columns(2)
+            with model_col_a:
+                transcription_model = st.selectbox(
+                    "Speech-to-text",
+                    AUDIO_TRANSCRIPTION_MODEL_OPTIONS,
+                    index=option_index(AUDIO_TRANSCRIPTION_MODEL_OPTIONS, active_transcription_model()),
+                    key=f"{prefix}_transcription_model",
+                )
+            with model_col_b:
+                tts_model = st.selectbox(
+                    "Text-to-speech",
+                    TTS_MODEL_OPTIONS,
+                    index=option_index(TTS_MODEL_OPTIONS, active_tts_model()),
+                    key=f"{prefix}_tts_model",
+                    disabled=not spoken_answer,
+                )
+        else:
+            transcription_model = st.selectbox(
+                "Speech-to-text",
+                AUDIO_TRANSCRIPTION_MODEL_OPTIONS,
+                index=option_index(AUDIO_TRANSCRIPTION_MODEL_OPTIONS, active_transcription_model()),
+                key=f"{prefix}_transcription_model",
+            )
+            tts_model = st.selectbox(
+                "Text-to-speech",
+                TTS_MODEL_OPTIONS,
+                index=option_index(TTS_MODEL_OPTIONS, active_tts_model()),
+                key=f"{prefix}_tts_model",
+                disabled=not spoken_answer,
+            )
     st.session_state.transcription_model = transcription_model
     st.session_state.tts_model = tts_model
-    st.caption("Voice playback is AI-generated.")
+    if not compact:
+        st.caption("Voice playback is AI-generated.")
 
     return {
         "language": language,
@@ -1013,11 +1104,12 @@ def render_spoken_answer(
     st.audio(cache[cache_key], format="audio/mp3")
 
 
-def render_source_filters(prefix: str, store: VectorStore) -> dict:
+def render_source_filters(prefix: str, store: VectorStore, *, use_expander: bool = True) -> dict:
     documents = store.list_documents()
     filters: dict = {}
 
-    with st.expander("Source filters"):
+    filter_context = st.expander("Source filters") if use_expander else st.container()
+    with filter_context:
         if not documents:
             st.caption("No documents available for filtering.")
             return filters
@@ -2468,37 +2560,65 @@ def conversation_export_markdown() -> str:
 
 def render_conversation() -> None:
     render_header("Conversation Mode", "Run multi-turn RAG with retained chat context and exportable citations.")
-    _, action_col = st.columns([1, 0.16])
-    with action_col:
-        if st.button("New chat", key="conversation_new_chat", use_container_width=True):
-            reset_conversation_chat()
-            st.rerun()
+    with st.container(key="conversation_chat_shell"):
+        with st.container(border=True, key="conversation_settings"):
+            with st.expander("Conversation settings", expanded=False):
+                model_col, retrieval_col, voice_col = st.columns([1, 1.15, 1], gap="large")
+                with model_col:
+                    st.subheader("Models")
+                    chat_model = model_selectbox(
+                        "Answer model",
+                        CHAT_MODEL_OPTIONS,
+                        active_chat_model(),
+                        "conversation_chat_model",
+                        disabled=not can_change_models(),
+                    )
+                    embedding_model = model_selectbox(
+                        "Knowledge index",
+                        EMBEDDING_MODEL_OPTIONS,
+                        active_embedding_model(),
+                        "conversation_embedding_model",
+                        disabled=not can_change_models(),
+                    )
+                    if not can_change_models():
+                        chat_model = active_chat_model()
+                        embedding_model = active_embedding_model()
+                        st.caption("Model changes require Admin role.")
 
-    left, right = st.columns([1.45, 0.8], gap="large")
-    with right:
-        st.subheader("Models")
-        chat_model = model_selectbox(
-            "Answer model",
-            CHAT_MODEL_OPTIONS,
-            active_chat_model(),
-            "conversation_chat_model",
-            disabled=not can_change_models(),
-        )
-        embedding_model = model_selectbox(
-            "Knowledge index",
-            EMBEDDING_MODEL_OPTIONS,
-            active_embedding_model(),
-            "conversation_embedding_model",
-            disabled=not can_change_models(),
-        )
-        if not can_change_models():
-            chat_model = active_chat_model()
-            embedding_model = active_embedding_model()
-            st.caption("Model changes require Admin role.")
+                st.session_state.chat_model = chat_model
+                st.session_state.embedding_model = embedding_model
+                store = get_vector_store(embedding_model)
 
-        st.session_state.chat_model = chat_model
-        st.session_state.embedding_model = embedding_model
-        voice_settings = render_voice_settings("conversation")
+                with retrieval_col:
+                    st.subheader("Retrieval")
+                    search_mode = st.segmented_control(
+                        "Search mode",
+                        ["Hybrid", "Semantic", "Keyword"],
+                        default="Hybrid",
+                        key="conversation_search_mode",
+                        help="Hybrid combines semantic FAISS search with keyword/BM25-style matching.",
+                    )
+                    base_runtime_settings = active_settings(chat_model=chat_model, embedding_model=embedding_model)
+                    top_k = st.slider(
+                        "Top K",
+                        min_value=1,
+                        max_value=20,
+                        value=base_runtime_settings.top_k,
+                        key="conversation_top_k",
+                    )
+                    min_score = st.slider(
+                        "Minimum similarity",
+                        min_value=0.0,
+                        max_value=1.0,
+                        value=0.0,
+                        step=0.01,
+                        key="conversation_min_score",
+                    )
+                    source_filters = render_source_filters("conversation", store, use_expander=False)
+
+                with voice_col:
+                    voice_settings = render_voice_settings("conversation", compact=True)
+
         runtime_settings = active_settings(
             chat_model=chat_model,
             embedding_model=embedding_model,
@@ -2506,46 +2626,46 @@ def render_conversation() -> None:
             tts_model=voice_settings["tts_model"],
             tts_voice=voice_settings["tts_voice"],
         )
-        store = get_vector_store(embedding_model)
-        search_mode = st.segmented_control(
-            "Search mode",
-            ["Hybrid", "Semantic", "Keyword"],
-            default="Hybrid",
-            key="conversation_search_mode",
-            help="Hybrid combines semantic FAISS search with keyword/BM25-style matching.",
-        )
-        source_filters = render_source_filters("conversation", store)
-        top_k = st.slider("Top K", min_value=1, max_value=20, value=runtime_settings.top_k, key="conversation_top_k")
-        min_score = st.slider(
-            "Minimum similarity",
-            min_value=0.0,
-            max_value=1.0,
-            value=0.0,
-            step=0.01,
-            key="conversation_min_score",
-        )
 
+        action_left, action_new, action_export_md, action_export_json = st.columns([1, 0.14, 0.18, 0.16], gap="small")
+        with action_left:
+            st.markdown(
+                f"""
+                <div class="conversation-action-row">
+                    <div>
+                        <div class="conversation-action-title">Enterprise RAG Chat</div>
+                        <div class="conversation-action-meta">{escape_html(active_embedding_model())} - {len(st.session_state.conversation_messages)} messages</div>
+                    </div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+        with action_new:
+            if st.button("New chat", key="conversation_new_chat", use_container_width=True):
+                reset_conversation_chat()
+                st.rerun()
         if st.session_state.conversation_messages:
-            st.download_button(
-                "Export Markdown",
-                conversation_export_markdown(),
-                "rag_conversation.md",
-                "text/markdown",
-                use_container_width=True,
-            )
-            st.download_button(
-                "Export JSON",
-                json.dumps(st.session_state.conversation_messages, indent=2),
-                "rag_conversation.json",
-                "application/json",
-                use_container_width=True,
-            )
+            with action_export_md:
+                st.download_button(
+                    "Markdown",
+                    conversation_export_markdown(),
+                    "rag_conversation.md",
+                    "text/markdown",
+                    use_container_width=True,
+                )
+            with action_export_json:
+                st.download_button(
+                    "JSON",
+                    json.dumps(st.session_state.conversation_messages, indent=2),
+                    "rag_conversation.json",
+                    "application/json",
+                    use_container_width=True,
+                )
 
-    if store.is_empty:
-        st.info("Index documents before starting a conversation.")
-        return
+        if store.is_empty:
+            st.info("Index documents before starting a conversation.")
+            return
 
-    with left:
         render_voice_input(
             "conversation",
             "Speak a follow-up question",
@@ -2566,6 +2686,18 @@ def render_conversation() -> None:
                 type="primary",
                 disabled=not voice_prompt.strip(),
                 use_container_width=True,
+            )
+
+        if not st.session_state.conversation_messages:
+            st.markdown(
+                """
+                <div class="conversation-empty-state">
+                    <div>
+                        <div class="conversation-empty-title">What would you like to know?</div>
+                    </div>
+                </div>
+                """,
+                unsafe_allow_html=True,
             )
 
         for message_index, message in enumerate(st.session_state.conversation_messages):
@@ -2589,18 +2721,18 @@ def render_conversation() -> None:
                             "utf-8"
                         )
                     ).hexdigest()
-                    render_feedback_controls(
-                        feedback_key=f"conversation_{feedback_key}",
-                        query=message.get("query", ""),
-                        answer=message.get("content", ""),
-                        result=message["result"],
-                        runtime_settings=runtime_settings,
-                        search_mode=message.get("search_mode", "hybrid"),
-                        filters=message.get("filters", {}),
-                        context="conversation",
-                    )
-                if message["role"] == "assistant" and message.get("result"):
-                    with st.expander("Citations"):
+                    with st.expander("Feedback", expanded=False):
+                        render_feedback_controls(
+                            feedback_key=f"conversation_{feedback_key}",
+                            query=message.get("query", ""),
+                            answer=message.get("content", ""),
+                            result=message["result"],
+                            runtime_settings=runtime_settings,
+                            search_mode=message.get("search_mode", "hybrid"),
+                            filters=message.get("filters", {}),
+                            context="conversation",
+                        )
+                    with st.expander("Citations", expanded=False):
                         render_answer_sources(
                             message["result"],
                             message.get("min_score", 0.0),
@@ -2608,7 +2740,7 @@ def render_conversation() -> None:
                             key_prefix=f"conversation_{message_index}",
                         )
 
-        prompt = st.chat_input("Ask a follow-up question")
+        prompt = st.chat_input("Message Enterprise RAG")
         prompt_to_send = voice_prompt.strip() if send_voice_prompt else (prompt or "").strip()
         if prompt_to_send:
             answer_language = response_language(voice_settings["language"], prompt_to_send)
