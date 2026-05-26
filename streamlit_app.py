@@ -4,6 +4,7 @@ import hashlib
 import html
 import json
 import logging
+import re
 from io import BytesIO
 from collections import Counter
 from datetime import datetime
@@ -2081,19 +2082,105 @@ AGENT_TOOL_LABELS = {
     "generate_report": "Generate Report",
 }
 
+AGENT_DOCUMENT_STOPWORDS = {
+    "a",
+    "an",
+    "and",
+    "answer",
+    "brief",
+    "citation",
+    "citations",
+    "compare",
+    "create",
+    "difference",
+    "differences",
+    "doc",
+    "docs",
+    "document",
+    "documents",
+    "file",
+    "files",
+    "generate",
+    "give",
+    "key",
+    "make",
+    "of",
+    "on",
+    "pdf",
+    "report",
+    "summarize",
+    "summary",
+    "the",
+    "to",
+    "txt",
+    "with",
+}
+
 
 def choose_agent_tool(goal: str, requested_tool: str, selected_hashes: list[str]) -> str:
     if requested_tool != "Auto":
         return requested_tool
 
     lowered = goal.lower()
-    if any(term in lowered for term in ("compare", "difference", "versus", " vs ")):
-        return "compare_documents" if len(selected_hashes) >= 2 else "search_documents"
-    if any(term in lowered for term in ("report", "brief", "write-up", "writeup", "executive summary")):
+    wants_compare = any(term in lowered for term in ("compare", "difference", "versus", " vs "))
+    wants_report = any(term in lowered for term in ("report", "brief", "write-up", "writeup", "executive summary"))
+    wants_summary = any(term in lowered for term in ("summarize", "summary", "overview", "key points", "main points"))
+
+    if wants_compare and len(selected_hashes) >= 2:
+        return "compare_documents"
+    if wants_report:
         return "generate_report"
-    if any(term in lowered for term in ("summarize", "summary", "overview", "key points", "main points")):
+    if wants_summary:
         return "summarize_documents"
+    if wants_compare:
+        return "search_documents"
     return "search_documents"
+
+
+def agent_document_terms(value: str) -> list[str]:
+    return [
+        token
+        for token in re.findall(r"[a-z0-9]+", value.lower(), flags=re.IGNORECASE)
+        if token not in AGENT_DOCUMENT_STOPWORDS and len(token) > 1 and not token.isdigit()
+    ]
+
+
+def infer_agent_document_hashes(goal: str, documents: dict[str, dict]) -> list[str]:
+    query_terms = set(agent_document_terms(goal))
+    if not query_terms:
+        return []
+
+    matches: list[tuple[int, str]] = []
+    for file_hash, document in documents.items():
+        title_terms = set(agent_document_terms(Path(document.get("file_name", "")).stem))
+        if not title_terms:
+            continue
+        overlap = len(query_terms & title_terms)
+        if overlap:
+            matches.append((overlap, file_hash))
+
+    return [file_hash for _, file_hash in sorted(matches, key=lambda item: item[0], reverse=True)]
+
+
+def unique_hashes(values: list[str]) -> list[str]:
+    seen: set[str] = set()
+    ordered: list[str] = []
+    for value in values:
+        if value and value not in seen:
+            ordered.append(value)
+            seen.add(value)
+    return ordered
+
+
+def describe_documents(file_hashes: list[str], documents_by_hash: dict[str, dict]) -> str:
+    names = []
+    for file_hash in file_hashes:
+        document = documents_by_hash.get(file_hash, {})
+        if isinstance(document, dict):
+            names.append(document.get("file_name", file_hash))
+        else:
+            names.append(str(document or file_hash))
+    return ", ".join(names) if names else "None"
 
 
 def selected_document_filters(selected_hashes: list[str]) -> dict | None:
@@ -2169,16 +2256,26 @@ def run_agentic_rag(
     store = get_vector_store(embedding_model)
     pipeline = get_pipeline(chat_model, embedding_model)
     documents_by_hash = {document["file_hash"]: document for document in store.list_documents()}
+    inferred_hashes = infer_agent_document_hashes(goal, documents_by_hash)
+    if not inferred_hashes:
+        inferred_hashes = infer_document_hashes(goal, documents_by_hash)
+    effective_hashes = unique_hashes(selected_hashes + inferred_hashes)
     selected_names = [
-        documents_by_hash.get(file_hash, {}).get("file_name", file_hash) for file_hash in selected_hashes
+        documents_by_hash.get(file_hash, {}).get("file_name", file_hash) for file_hash in effective_hashes
     ]
-    tool_name = choose_agent_tool(goal, requested_tool, selected_hashes)
-    filters = selected_document_filters(selected_hashes)
+    tool_name = choose_agent_tool(goal, requested_tool, effective_hashes)
+    filters = selected_document_filters(effective_hashes)
     plan = [
         f"Selected tool: {AGENT_TOOL_LABELS.get(tool_name, tool_name)}",
         f"Search mode: {search_mode.title()}",
         f"Evidence target: top {top_k} chunks",
     ]
+    if selected_hashes:
+        plan.append(f"Manual focus documents: {describe_documents(selected_hashes, documents_by_hash)}")
+    if inferred_hashes:
+        plan.append(f"Inferred focus documents: {describe_documents(inferred_hashes, documents_by_hash)}")
+    if "compare" in goal.lower() and len(effective_hashes) < 2:
+        plan.append("Could not identify two focus documents, so comparison may be limited.")
 
     if tool_name == "search_documents":
         result = generate_rag_result(
@@ -2203,9 +2300,9 @@ def run_agentic_rag(
             "filters": filters,
         }
 
-    if tool_name in {"summarize_documents", "compare_documents"} and selected_hashes:
-        chunks = collect_document_context_chunks(store, selected_hashes, limit_per_document=8)
-        plan.append("Used selected document chunks instead of open-ended search.")
+    if tool_name in {"summarize_documents", "compare_documents", "generate_report"} and effective_hashes:
+        chunks = collect_document_context_chunks(store, effective_hashes, limit_per_document=8)
+        plan.append("Used focused document chunks instead of open-ended search.")
     else:
         retrieval_query = f"{tool_name.replace('_', ' ')}: {goal}"
         chunks = pipeline.retrieve_chunks(
@@ -3698,9 +3795,14 @@ def render_agent() -> None:
         height=110,
         placeholder="Example: Compare the Heidi and Black Beauty documents and generate a short report with citations.",
     )
-    compare_blocked = requested_tool == "compare_documents" and len(selected_documents) < 2
+    inferred_focus_documents = infer_agent_document_hashes(goal, store.documents) if goal.strip() else []
+    effective_focus_documents = unique_hashes(selected_documents + inferred_focus_documents)
+    if inferred_focus_documents and not selected_documents:
+        st.caption(f"Auto inferred focus documents: {describe_documents(inferred_focus_documents, document_options)}")
+
+    compare_blocked = requested_tool == "compare_documents" and len(effective_focus_documents) < 2
     if compare_blocked:
-        st.warning("Compare Documents needs at least two focus documents.")
+        st.warning("Compare Documents needs at least two focus documents. Select them or mention their filenames in the goal.")
 
     run_col, clear_col = st.columns([1, 0.24], gap="small")
     run_clicked = run_col.button(
