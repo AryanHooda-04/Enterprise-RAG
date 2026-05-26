@@ -29,7 +29,7 @@ from errors import RAGApplicationError
 from feedback_store import feedback_csv, feedback_jsonl, load_feedback, save_feedback
 from ingestion import generate_embeddings, ingest_file, safe_filename
 from rag_pipeline import RAGPipeline
-from retriever import infer_document_hashes, semantic_search
+from retriever import Retriever, infer_document_hashes
 from usage_store import load_usage, summarize_usage, usage_csv, usage_jsonl
 from vector_store import VectorStore
 
@@ -41,16 +41,26 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-NAV_ITEMS = (
-    "Dashboard",
+PRIMARY_NAV_ITEMS = (
     "Ask",
     "Conversation",
-    "Ingestion",
-    "Retrieval Audit",
+)
+KNOWLEDGE_NAV_ITEMS = (
+    "Dashboard",
     "Documents",
+    "Retrieval Audit",
+)
+ADMIN_NAV_ITEMS = (
+    "Ingestion",
     "Index Management",
     "Administration",
 )
+NAV_GROUPS = (
+    ("Primary", PRIMARY_NAV_ITEMS),
+    ("Knowledge", KNOWLEDGE_NAV_ITEMS),
+    ("Admin tools", ADMIN_NAV_ITEMS),
+)
+NAV_ITEMS = PRIMARY_NAV_ITEMS + KNOWLEDGE_NAV_ITEMS + ADMIN_NAV_ITEMS
 
 ADMIN_ONLY_NAV = {"Ingestion", "Index Management", "Administration"}
 ROLES = ("Admin", "User")
@@ -80,7 +90,8 @@ def get_store_lock() -> Lock:
 
 
 def init_session_state() -> None:
-    st.session_state.setdefault("nav_selection", "Dashboard")
+    st.session_state.setdefault("role", settings.default_role if settings.default_role in ROLES else "Admin")
+    st.session_state.setdefault("nav_selection", default_nav_selection())
     st.session_state.setdefault("chat_model", settings.openai_chat_model)
     st.session_state.setdefault("embedding_model", settings.openai_embedding_model)
     st.session_state.setdefault("vision_model", settings.openai_vision_model)
@@ -89,7 +100,6 @@ def init_session_state() -> None:
     st.session_state.setdefault("query_history", [])
     st.session_state.setdefault("conversation_messages", [])
     st.session_state.setdefault("last_ingestion", None)
-    st.session_state.setdefault("role", settings.default_role if settings.default_role in ROLES else "Admin")
     st.session_state.setdefault("authenticated", not settings.auth_enabled)
     st.session_state.setdefault("username", "")
     st.session_state.setdefault("theme_mode", "Dark")
@@ -198,6 +208,15 @@ def can_access_nav(item: str) -> bool:
     return is_admin() or item not in ADMIN_ONLY_NAV
 
 
+def accessible_nav_items() -> list[str]:
+    return [item for item in NAV_ITEMS if can_access_nav(item)]
+
+
+def default_nav_selection() -> str:
+    items = accessible_nav_items()
+    return "Ask" if "Ask" in items else (items[0] if items else "Dashboard")
+
+
 def can_change_models() -> bool:
     return is_admin()
 
@@ -228,7 +247,7 @@ def sign_out_current_user() -> None:
     st.session_state.authenticated = False
     st.session_state.role = "User"
     st.session_state.username = ""
-    st.session_state.nav_selection = "Dashboard"
+    st.session_state.nav_selection = default_nav_selection()
 
 
 def render_identity_controls() -> None:
@@ -246,7 +265,7 @@ def render_identity_controls() -> None:
     if role != current_role():
         st.session_state.role = role
         if not can_access_nav(st.session_state.nav_selection):
-            st.session_state.nav_selection = "Dashboard"
+            st.session_state.nav_selection = default_nav_selection()
         st.rerun()
     st.sidebar.caption("Local RBAC simulation. Enable RAG_AUTH_ENABLED for password-gated roles.")
 
@@ -292,7 +311,7 @@ def render_login_page() -> None:
                 st.session_state.authenticated = True
                 st.session_state.role = role
                 st.session_state.username = username.strip().lower()
-                st.session_state.nav_selection = "Dashboard"
+                st.session_state.nav_selection = default_nav_selection()
                 st.rerun()
             st.error("Invalid username or password.")
 
@@ -743,6 +762,132 @@ def inject_enterprise_styles() -> None:
             margin-bottom: 0.55rem;
         }
 
+        .empty-state-panel {
+            border: 1px dashed var(--rag-border);
+            background: rgba(23, 29, 38, 0.52);
+            border-radius: 8px;
+            padding: 1.2rem;
+            margin: 0.75rem 0 1rem;
+        }
+
+        .empty-state-title {
+            color: var(--rag-text);
+            font-size: 1.05rem;
+            font-weight: 800;
+            margin-bottom: 0.3rem;
+        }
+
+        .empty-state-copy {
+            color: var(--rag-muted);
+            font-size: 0.9rem;
+            line-height: 1.45;
+        }
+
+        .answer-quality {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 0.7rem;
+            border: 1px solid var(--rag-border);
+            background: rgba(23, 29, 38, 0.64);
+            border-radius: 8px;
+            padding: 0.65rem 0.75rem;
+            margin: 0.75rem 0 0.4rem;
+            color: var(--rag-muted);
+            font-size: 0.84rem;
+        }
+
+        .confidence-badge {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            white-space: nowrap;
+            border-radius: 999px;
+            padding: 0.22rem 0.58rem;
+            font-weight: 800;
+            color: var(--rag-text);
+            border: 1px solid var(--rag-border);
+        }
+
+        .confidence-high {
+            background: rgba(47, 191, 113, 0.16);
+            border-color: rgba(47, 191, 113, 0.44);
+        }
+
+        .confidence-medium {
+            background: rgba(216, 155, 43, 0.16);
+            border-color: rgba(216, 155, 43, 0.44);
+        }
+
+        .confidence-low {
+            background: rgba(224, 95, 95, 0.16);
+            border-color: rgba(224, 95, 95, 0.44);
+        }
+
+        .evidence-summary {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 0.65rem;
+            margin: 0.5rem 0 0.9rem;
+        }
+
+        .evidence-chip {
+            border: 1px solid var(--rag-border);
+            background: rgba(23, 29, 38, 0.64);
+            border-radius: 8px;
+            padding: 0.65rem;
+        }
+
+        .evidence-chip-label {
+            color: var(--rag-muted);
+            font-size: 0.72rem;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 0.03rem;
+        }
+
+        .evidence-chip-value {
+            color: var(--rag-text);
+            font-size: 1rem;
+            font-weight: 800;
+            margin-top: 0.15rem;
+        }
+
+        .source-card {
+            border: 1px solid var(--rag-border);
+            background: rgba(23, 29, 38, 0.58);
+            border-radius: 8px;
+            padding: 0.85rem;
+            margin: 0.65rem 0 0.35rem;
+        }
+
+        .source-card-header {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 0.75rem;
+            margin-bottom: 0.45rem;
+        }
+
+        .source-card-title {
+            color: var(--rag-text);
+            font-weight: 800;
+            line-height: 1.3;
+        }
+
+        .source-card-meta {
+            color: var(--rag-muted);
+            font-size: 0.78rem;
+            margin-top: 0.15rem;
+        }
+
+        .source-card-excerpt {
+            color: var(--rag-text);
+            font-size: 0.9rem;
+            line-height: 1.5;
+            overflow-wrap: anywhere;
+        }
+
         .st-key-conversation_chat_shell,
         .st-key-ask_chat_shell {
             max-width: 980px;
@@ -800,8 +945,9 @@ def inject_enterprise_styles() -> None:
 
         .st-key-conversation_chat_shell [data-testid="stChatMessage"],
         .st-key-ask_chat_shell [data-testid="stChatMessage"] {
-            border-bottom: 1px solid rgba(168, 176, 188, 0.12);
-            padding: 1rem 0;
+            border-bottom: 0;
+            padding: 1rem 0.25rem;
+            background: transparent;
         }
 
         .st-key-conversation_chat_shell [data-testid="stChatMessage"]:last-of-type,
@@ -812,6 +958,7 @@ def inject_enterprise_styles() -> None:
         .st-key-conversation_chat_shell [data-testid="stChatMessage"] [data-testid="stMarkdownContainer"],
         .st-key-ask_chat_shell [data-testid="stChatMessage"] [data-testid="stMarkdownContainer"] {
             line-height: 1.55;
+            max-width: 820px;
         }
 
         .st-key-conversation_chat_shell [data-testid="stChatMessage"] [data-testid="stExpander"],
@@ -835,6 +982,71 @@ def inject_enterprise_styles() -> None:
             color: var(--rag-muted);
             font-size: 0.8rem;
             margin-bottom: 0.35rem;
+        }
+
+        .ingestion-steps {
+            display: grid;
+            grid-template-columns: repeat(5, minmax(0, 1fr));
+            gap: 0.55rem;
+            margin: 0.25rem 0 1rem;
+        }
+
+        .ingestion-step {
+            border: 1px solid var(--rag-border);
+            background: rgba(23, 29, 38, 0.58);
+            border-radius: 8px;
+            padding: 0.7rem;
+            min-height: 4rem;
+        }
+
+        .ingestion-step-active {
+            border-color: rgba(79, 140, 255, 0.62);
+            background: rgba(79, 140, 255, 0.12);
+        }
+
+        .ingestion-step-done {
+            border-color: rgba(47, 191, 113, 0.45);
+            background: rgba(47, 191, 113, 0.1);
+        }
+
+        .ingestion-step-label {
+            color: var(--rag-text);
+            font-weight: 800;
+            font-size: 0.84rem;
+            margin-bottom: 0.2rem;
+        }
+
+        .ingestion-step-note {
+            color: var(--rag-muted);
+            font-size: 0.76rem;
+            line-height: 1.35;
+        }
+
+        .audit-guide-grid {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 0.65rem;
+            margin: 0.5rem 0 1rem;
+        }
+
+        .audit-guide-card {
+            border: 1px solid var(--rag-border);
+            background: rgba(23, 29, 38, 0.58);
+            border-radius: 8px;
+            padding: 0.75rem;
+        }
+
+        .audit-guide-title {
+            color: var(--rag-text);
+            font-size: 0.9rem;
+            font-weight: 800;
+            margin-bottom: 0.25rem;
+        }
+
+        .audit-guide-copy {
+            color: var(--rag-muted);
+            font-size: 0.8rem;
+            line-height: 1.4;
         }
 
         .small-pill {
@@ -862,14 +1074,31 @@ def inject_enterprise_styles() -> None:
         }
 
         @media (max-width: 900px) {
-            .metric-row {
+            .metric-row,
+            .evidence-summary,
+            .audit-guide-grid {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
+            .ingestion-steps {
                 grid-template-columns: repeat(2, minmax(0, 1fr));
             }
         }
 
         @media (max-width: 560px) {
-            .metric-row {
+            .metric-row,
+            .evidence-summary,
+            .audit-guide-grid,
+            .ingestion-steps {
                 grid-template-columns: 1fr;
+            }
+            .rag-title {
+                align-items: flex-start;
+                flex-direction: column;
+            }
+            .answer-quality,
+            .source-card-header {
+                align-items: flex-start;
+                flex-direction: column;
             }
         }
         </style>
@@ -903,6 +1132,14 @@ def inject_enterprise_styles() -> None:
             .st-key-workspace_nav,
             .st-key-app_sidebar {
                 background: rgba(255, 255, 255, 0.94);
+            }
+            .empty-state-panel,
+            .answer-quality,
+            .evidence-chip,
+            .source-card,
+            .ingestion-step,
+            .audit-guide-card {
+                background: rgba(255, 255, 255, 0.86);
             }
             </style>
             """,
@@ -1501,9 +1738,9 @@ def render_navigation_menu() -> None:
 
 
 def render_workspace_nav(selected: str) -> None:
-    items = [item for item in NAV_ITEMS if can_access_nav(item)]
+    items = accessible_nav_items()
     if selected not in items:
-        selected = "Dashboard"
+        selected = default_nav_selection()
         st.session_state.nav_selection = selected
 
     with st.container(border=True, key="workspace_nav"):
@@ -1530,9 +1767,9 @@ def render_workspace_nav(selected: str) -> None:
 
 
 def render_app_sidebar(selected: str) -> str:
-    items = [item for item in NAV_ITEMS if can_access_nav(item)]
+    items = accessible_nav_items()
     if selected not in items:
-        selected = "Dashboard"
+        selected = default_nav_selection()
         st.session_state.nav_selection = selected
 
     with st.container(border=True, key="app_sidebar"):
@@ -1552,18 +1789,21 @@ def render_app_sidebar(selected: str) -> str:
                 st.rerun()
             st.divider()
 
-        st.markdown('<div class="sidebar-section-label">Workspace</div>', unsafe_allow_html=True)
-
-        for item in items:
-            button_type = "primary" if selected == item else "secondary"
-            if st.button(
-                item,
-                key=f"app_side_nav_{item}",
-                use_container_width=True,
-                type=button_type,
-            ):
-                st.session_state.nav_selection = item
-                st.rerun()
+        for label, group_items in NAV_GROUPS:
+            available_group_items = [item for item in group_items if item in items]
+            if not available_group_items:
+                continue
+            st.markdown(f'<div class="sidebar-section-label">{escape_html(label)}</div>', unsafe_allow_html=True)
+            for item in available_group_items:
+                button_type = "primary" if selected == item else "secondary"
+                if st.button(
+                    item,
+                    key=f"app_side_nav_{item}",
+                    use_container_width=True,
+                    type=button_type,
+                ):
+                    st.session_state.nav_selection = item
+                    st.rerun()
 
         st.divider()
         if not settings.auth_enabled:
@@ -1698,6 +1938,90 @@ def render_source_preview(metadata: dict, runtime_settings) -> None:
         return
 
     st.caption("Preview is available for PDF, image, and text sources. Download or open this document for full review.")
+
+
+def confidence_status(result: dict) -> tuple[str, str, str]:
+    score = float(result.get("confidence", 0.0) or 0.0)
+    source_count = len(result.get("sources", []))
+    if source_count == 0 or score <= 0:
+        return "No evidence", "low", "No source chunks passed the current retrieval filters."
+    if score >= 0.72 and source_count >= 2:
+        return "High confidence", "high", "Strong retrieved evidence with multiple supporting chunks."
+    if score >= 0.45:
+        return "Medium confidence", "medium", "Usable retrieved evidence; review citations for important decisions."
+    return "Low confidence", "low", "Weak retrieved evidence; adjust filters or ask a more specific question."
+
+
+def render_answer_quality(result: dict, min_score: float) -> None:
+    label, tone, note = confidence_status(result)
+    source_count = len(result.get("sources", []))
+    score = float(result.get("confidence", 0.0) or 0.0)
+    st.markdown(
+        f"""
+        <div class="answer-quality">
+            <span class="confidence-badge confidence-{tone}">{escape_html(label)}</span>
+            <span>{escape_html(note)} Sources: {source_count}. Score: {score:.2f}. Threshold: {min_score:.2f}.</span>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def render_index_empty_state(context: str, key_prefix: str) -> None:
+    admin_copy = "Upload documents to create the searchable index for this workspace."
+    user_copy = "No documents are indexed yet. Ask an admin to upload documents before using this workspace."
+    st.markdown(
+        f"""
+        <div class="empty-state-panel">
+            <div class="empty-state-title">No indexed documents available</div>
+            <div class="empty-state-copy">{escape_html(admin_copy if is_admin() else user_copy)}</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+    if is_admin():
+        if st.button("Go to Ingestion", key=f"{key_prefix}_go_to_ingestion", type="primary"):
+            st.session_state.nav_selection = "Ingestion"
+            st.rerun()
+    else:
+        st.caption(f"{context} will be available after documents are indexed.")
+
+
+def render_ingestion_steps(active_step: str = "upload") -> None:
+    steps = [
+        ("upload", "Upload", "Files enter the queue"),
+        ("extract", "Extract", "Text and visuals are read"),
+        ("chunk", "Chunk", "Content is split by tokens"),
+        ("embed", "Embed", "Chunks become vectors"),
+        ("index", "Index", "FAISS and metadata are saved"),
+    ]
+    order = [step[0] for step in steps]
+    active_position = order.index(active_step) if active_step in order else 0
+    cards = []
+    for position, (key, label, note) in enumerate(steps):
+        state_class = "ingestion-step-active" if position == active_position else ""
+        if position < active_position:
+            state_class = "ingestion-step-done"
+        cards.append(
+            f'<div class="ingestion-step {state_class}">'
+            f'<div class="ingestion-step-label">{escape_html(label)}</div>'
+            f'<div class="ingestion-step-note">{escape_html(note)}</div>'
+            "</div>"
+        )
+    st.markdown(f'<div class="ingestion-steps">{"".join(cards)}</div>', unsafe_allow_html=True)
+
+
+def retrieval_reason(method: str | None) -> str:
+    normalized = (method or "semantic").strip().lower()
+    if normalized == "keyword":
+        return "Selected because exact query terms matched the chunk text or metadata."
+    if normalized == "hybrid":
+        return "Selected because semantic similarity and keyword evidence both contributed to its rank."
+    if normalized == "context-window":
+        return "Included as neighboring context around a stronger retrieved match."
+    if normalized == "document-overview":
+        return "Included to provide broad document context for an overview-style question."
+    return "Selected because the query embedding is close to this chunk embedding."
 
 
 def generate_rag_result(
@@ -1916,8 +2240,11 @@ def process_ingestion_queue(runtime_settings) -> dict:
     for index, item in enumerate(queued_items, start=1):
         item["status"] = "indexing"
         item["attempts"] = int(item.get("attempts", 0)) + 1
-        item["message"] = "Indexing"
-        status.info(f"Indexing {index} of {len(queued_items)}: {item['file_name']}")
+        item["message"] = "Extracting, chunking, embedding, and indexing"
+        status.info(
+            f"Processing {index} of {len(queued_items)}: {item['file_name']} "
+            "(extract > chunk > embed > index)"
+        )
         try:
             item_settings = active_settings(
                 embedding_model=item.get("embedding_model", runtime_settings.openai_embedding_model),
@@ -1935,7 +2262,7 @@ def process_ingestion_queue(runtime_settings) -> dict:
             )
             item["status"] = "completed"
             item["chunks_added"] = result.get("chunks_added", 0)
-            item["message"] = "Duplicate skipped" if result.get("skipped") else "Indexing completed"
+            item["message"] = "Duplicate skipped" if result.get("skipped") else "Indexed in FAISS"
             item["completed_at"] = datetime.now().strftime("%H:%M:%S")
             summary["processed"] += 1
             summary["chunks_added"] += int(result.get("chunks_added", 0))
@@ -2071,23 +2398,23 @@ def render_sidebar() -> str:
         st.session_state.theme_mode = theme_mode
         st.rerun()
     st.sidebar.divider()
-    st.sidebar.markdown('<div class="sidebar-section-label">Workspace</div>', unsafe_allow_html=True)
-
-    for item in NAV_ITEMS:
-        disabled = not can_access_nav(item)
-        button_type = "primary" if st.session_state.nav_selection == item else "secondary"
-        if st.sidebar.button(
-            item,
-            key=f"nav_{item}",
-            use_container_width=True,
-            type=button_type,
-            disabled=disabled,
-        ):
-            st.session_state.nav_selection = item
-            st.rerun()
+    for label, group_items in NAV_GROUPS:
+        st.sidebar.markdown(f'<div class="sidebar-section-label">{escape_html(label)}</div>', unsafe_allow_html=True)
+        for item in group_items:
+            disabled = not can_access_nav(item)
+            button_type = "primary" if st.session_state.nav_selection == item else "secondary"
+            if st.sidebar.button(
+                item,
+                key=f"nav_{item}",
+                use_container_width=True,
+                type=button_type,
+                disabled=disabled,
+            ):
+                st.session_state.nav_selection = item
+                st.rerun()
 
     if not can_access_nav(st.session_state.nav_selection):
-        st.session_state.nav_selection = "Dashboard"
+        st.session_state.nav_selection = default_nav_selection()
 
     selected = st.session_state.nav_selection
     st.sidebar.divider()
@@ -2120,6 +2447,17 @@ def render_sidebar() -> str:
 def render_dashboard() -> None:
     render_header("Knowledge Operations", "Monitor index readiness, ingestion volume, and retrieval activity.")
     render_metric_grid()
+
+    action_col_a, action_col_b, action_col_c = st.columns([1, 1, 1], gap="small")
+    if action_col_a.button("Ask a question", key="dashboard_go_ask", type="primary", use_container_width=True):
+        st.session_state.nav_selection = "Ask"
+        st.rerun()
+    if action_col_b.button("Open conversation", key="dashboard_go_conversation", use_container_width=True):
+        st.session_state.nav_selection = "Conversation"
+        st.rerun()
+    if is_admin() and action_col_c.button("Upload documents", key="dashboard_go_ingestion", use_container_width=True):
+        st.session_state.nav_selection = "Ingestion"
+        st.rerun()
 
     left, right = st.columns([1.35, 1], gap="large")
     with left:
@@ -2176,62 +2514,80 @@ def render_ingestion() -> None:
             f"Per-file limit: {format_size(settings.max_upload_size_mb)}."
         )
 
+    embedding_model = active_embedding_model()
+    vision_enabled = active_vision_enabled()
+    vision_model = active_vision_model()
+    vision_detail = active_vision_detail()
+    runtime_settings = active_settings(
+        embedding_model=embedding_model,
+        vision_model=vision_model,
+        vision_ingestion_enabled=vision_enabled,
+        vision_detail=vision_detail,
+    )
+    chunk_size = runtime_settings.chunk_size_tokens
+    chunk_overlap = runtime_settings.chunk_overlap_tokens
+
     with right:
-        st.subheader("Index Model")
-        embedding_model = model_selectbox(
-            "Embedding model",
-            EMBEDDING_MODEL_OPTIONS,
-            active_embedding_model(),
-            "ingestion_embedding_model",
-        )
-        st.session_state.embedding_model = embedding_model
-
-        st.subheader("Visual Understanding")
-        vision_enabled = st.toggle(
-            "Understand images during indexing",
-            value=active_vision_enabled(),
-            help="Uses the vision model to describe images in PDFs, DOCX files, and standalone image uploads.",
-        )
-        vision_model = model_selectbox(
-            "Vision model",
-            VISION_MODEL_OPTIONS,
-            active_vision_model(),
-            "ingestion_vision_model",
-            disabled=not vision_enabled,
-        )
-        vision_detail = st.selectbox(
-            "Vision detail",
-            ["high", "auto", "low"],
-            index=["high", "auto", "low"].index(active_vision_detail() if active_vision_detail() in {"high", "auto", "low"} else "high"),
-            disabled=not vision_enabled,
-        )
-        st.session_state.vision_ingestion_enabled = vision_enabled
-        st.session_state.vision_model = vision_model
-        st.session_state.vision_detail = vision_detail
-
-        runtime_settings = active_settings(
-            embedding_model=embedding_model,
-            vision_model=vision_model,
-            vision_ingestion_enabled=vision_enabled,
-            vision_detail=vision_detail,
-        )
+        st.subheader("Indexing Defaults")
         st.caption(f"Index: {runtime_settings.index_dir.name}")
+        st.caption(f"Chunking: {chunk_size} tokens with {chunk_overlap} overlap")
+        with st.expander("Advanced indexing settings", expanded=False):
+            st.subheader("Index Model")
+            embedding_model = model_selectbox(
+                "Embedding model",
+                EMBEDDING_MODEL_OPTIONS,
+                active_embedding_model(),
+                "ingestion_embedding_model",
+            )
+            st.session_state.embedding_model = embedding_model
 
-        st.subheader("Chunking")
-        chunk_size = st.number_input(
-            "Chunk size",
-            min_value=100,
-            max_value=4000,
-            value=runtime_settings.chunk_size_tokens,
-            step=50,
-        )
-        chunk_overlap = st.number_input(
-            "Overlap",
-            min_value=0,
-            max_value=max(0, int(chunk_size) - 1),
-            value=min(runtime_settings.chunk_overlap_tokens, max(0, int(chunk_size) - 1)),
-            step=10,
-        )
+            st.subheader("Visual Understanding")
+            vision_enabled = st.toggle(
+                "Understand images during indexing",
+                value=active_vision_enabled(),
+                help="Uses the vision model to describe images in PDFs, DOCX files, and standalone image uploads.",
+            )
+            vision_model = model_selectbox(
+                "Vision model",
+                VISION_MODEL_OPTIONS,
+                active_vision_model(),
+                "ingestion_vision_model",
+                disabled=not vision_enabled,
+            )
+            vision_detail = st.selectbox(
+                "Vision detail",
+                ["high", "auto", "low"],
+                index=["high", "auto", "low"].index(
+                    active_vision_detail() if active_vision_detail() in {"high", "auto", "low"} else "high"
+                ),
+                disabled=not vision_enabled,
+            )
+            st.session_state.vision_ingestion_enabled = vision_enabled
+            st.session_state.vision_model = vision_model
+            st.session_state.vision_detail = vision_detail
+
+            runtime_settings = active_settings(
+                embedding_model=embedding_model,
+                vision_model=vision_model,
+                vision_ingestion_enabled=vision_enabled,
+                vision_detail=vision_detail,
+            )
+
+            st.subheader("Chunking")
+            chunk_size = st.number_input(
+                "Chunk size",
+                min_value=100,
+                max_value=4000,
+                value=runtime_settings.chunk_size_tokens,
+                step=50,
+            )
+            chunk_overlap = st.number_input(
+                "Overlap",
+                min_value=0,
+                max_value=max(0, int(chunk_size) - 1),
+                value=min(runtime_settings.chunk_overlap_tokens, max(0, int(chunk_size) - 1)),
+                step=10,
+            )
 
     runtime_settings = active_settings(
         embedding_model=st.session_state.embedding_model,
@@ -2243,8 +2599,8 @@ def render_ingestion() -> None:
     if uploaded_files and len(uploaded_files) > runtime_settings.max_upload_files:
         st.error(f"Select {runtime_settings.max_upload_files} documents or fewer per batch.")
 
-    queue_col_a, queue_col_b, queue_col_c = st.columns([1, 1, 1])
-    if queue_col_a.button("Add to queue", type="primary", disabled=start_disabled, use_container_width=True):
+    upload_action_col, _ = st.columns([1, 2])
+    if upload_action_col.button("Add to queue", type="primary", disabled=start_disabled, use_container_width=True):
         added_to_queue, failures = enqueue_uploaded_files(
             uploaded_files,
             int(chunk_size),
@@ -2261,6 +2617,18 @@ def render_ingestion() -> None:
 
     queued_count = sum(1 for item in st.session_state.ingestion_queue if item.get("status") == "queued")
     failed_count = sum(1 for item in st.session_state.ingestion_queue if item.get("status") == "failed")
+    indexing_count = sum(1 for item in st.session_state.ingestion_queue if item.get("status") == "indexing")
+    if indexing_count:
+        active_ingestion_step = "index"
+    elif queued_count:
+        active_ingestion_step = "extract"
+    elif st.session_state.last_ingestion:
+        active_ingestion_step = "index"
+    else:
+        active_ingestion_step = "upload"
+    render_ingestion_steps(active_ingestion_step)
+
+    queue_col_b, queue_col_c = st.columns([1, 1])
     if queue_col_b.button("Start queue", disabled=queued_count == 0, use_container_width=True):
         summary = process_ingestion_queue(runtime_settings)
         summary = {
@@ -2303,10 +2671,26 @@ def render_answer_sources(
     key_prefix: str = "sources",
 ) -> None:
     source_count = len(result["sources"])
-    col_a, col_b, col_c = st.columns(3)
-    col_a.metric("Confidence", f"{result['confidence']:.2f}")
-    col_b.metric("Sources", source_count)
-    col_c.metric("Min Similarity", f"{min_score:.2f}")
+    label, tone, _ = confidence_status(result)
+    st.markdown(
+        f"""
+        <div class="evidence-summary">
+            <div class="evidence-chip">
+                <div class="evidence-chip-label">Confidence</div>
+                <div class="evidence-chip-value"><span class="confidence-badge confidence-{tone}">{escape_html(label)}</span></div>
+            </div>
+            <div class="evidence-chip">
+                <div class="evidence-chip-label">Sources</div>
+                <div class="evidence-chip-value">{source_count}</div>
+            </div>
+            <div class="evidence-chip">
+                <div class="evidence-chip-label">Minimum similarity</div>
+                <div class="evidence-chip-value">{min_score:.2f}</div>
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
     if not result["sources"]:
         st.info("No retrieved context met the selected threshold.")
@@ -2316,20 +2700,44 @@ def render_answer_sources(
     for index, (source, metadata) in enumerate(zip(result["sources"], result["source_metadata"]), start=1):
         file_name = metadata.get("file_name") or "Unknown"
         page = metadata.get("page_number")
-        page_label = f", page {page}" if page else ""
+        page_label = f"Page {page}" if page else "Page not available"
         source_type = metadata.get("source_type") or "text"
         retrieval_method = metadata.get("retrieval_method") or "semantic"
         image_index = metadata.get("image_index")
-        image_label = f", image {image_index}" if image_index else ""
+        image_label = f"Image {image_index}" if image_index else ""
         score = metadata.get("score", 0)
+        score_value = float(score or 0.0)
+        card_meta_parts = [page_label, source_type, retrieval_method]
+        if image_label:
+            card_meta_parts.append(image_label)
+        card_meta = " - ".join(str(part) for part in card_meta_parts if part)
+        score_tone = "high" if score_value >= 0.72 else ("medium" if score_value >= 0.45 else "low")
+        excerpt = source[:850].strip()
+        if len(source) > 850:
+            excerpt = f"{excerpt}..."
+        st.markdown(
+            f"""
+            <div class="source-card">
+                <div class="source-card-header">
+                    <div>
+                        <div class="source-card-title">Source {index}: {escape_html(file_name)}</div>
+                        <div class="source-card-meta">{escape_html(card_meta)}</div>
+                    </div>
+                    <span class="confidence-badge confidence-{score_tone}">Score {score_value:.2f}</span>
+                </div>
+                <div class="source-card-excerpt">{escape_html(excerpt)}</div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
         with st.expander(
-            f"Source {index}: {file_name}{page_label}{image_label} - {retrieval_method} - score {score:.2f}",
-            expanded=index == 1,
+            f"Inspect source {index}",
+            expanded=False,
         ):
             st.markdown(
                 f"""
                 <div class="source-panel">
-                    <div class="source-meta">Source {index} - {escape_html(file_name)}{escape_html(page_label)}{escape_html(image_label)} - {escape_html(source_type)} - {escape_html(retrieval_method)} - score {score:.2f}</div>
+                    <div class="source-meta">Source {index} - {escape_html(file_name)} - {escape_html(card_meta)} - score {score_value:.2f}</div>
                     <div>{escape_html(source[:1200])}</div>
                 </div>
                 """,
@@ -2375,7 +2783,7 @@ def render_ask() -> None:
     render_header("Ask Workspace", "Generate source-grounded answers with auditable retrieval context.")
     with st.container(key="ask_chat_shell"):
         with st.container(border=True, key="ask_settings"):
-            with st.expander("Ask settings", expanded=False):
+            with st.expander("Advanced controls", expanded=False):
                 model_col, retrieval_col, voice_col = st.columns([1, 1.15, 1], gap="large")
                 with model_col:
                     st.subheader("Models")
@@ -2465,7 +2873,7 @@ def render_ask() -> None:
                 st.rerun()
 
         if store.is_empty:
-            st.info("Index documents before asking questions.")
+            render_index_empty_state("Ask", "ask_empty_index")
             return
 
         render_voice_input(
@@ -2509,6 +2917,7 @@ def render_ask() -> None:
                 st.write(last["query"])
             with st.chat_message("assistant"):
                 st.write(result["answer"])
+                render_answer_quality(result, last["min_score"])
                 render_spoken_answer(
                     result["answer"],
                     last["voice_settings"],
@@ -2560,6 +2969,7 @@ def render_ask() -> None:
                         stream_placeholder=stream_placeholder,
                     )
                 stream_placeholder.markdown(result["answer"])
+                render_answer_quality(result, min_score)
                 render_spoken_answer(
                     result["answer"],
                     voice_settings,
@@ -2655,7 +3065,7 @@ def render_conversation() -> None:
     render_header("Conversation Mode", "Run multi-turn RAG with retained chat context and exportable citations.")
     with st.container(key="conversation_chat_shell"):
         with st.container(border=True, key="conversation_settings"):
-            with st.expander("Conversation settings", expanded=False):
+            with st.expander("Advanced controls", expanded=False):
                 model_col, retrieval_col, voice_col = st.columns([1, 1.15, 1], gap="large")
                 with model_col:
                     st.subheader("Models")
@@ -2756,7 +3166,7 @@ def render_conversation() -> None:
                 )
 
         if store.is_empty:
-            st.info("Index documents before starting a conversation.")
+            render_index_empty_state("Conversation", "conversation_empty_index")
             return
 
         render_voice_input(
@@ -2809,6 +3219,7 @@ def render_conversation() -> None:
                         key_prefix=f"conversation_audio_{message_index}",
                     )
                 if message["role"] == "assistant" and message.get("result"):
+                    render_answer_quality(message["result"], message.get("min_score", 0.0))
                     feedback_key = message.get("feedback_key") or hashlib.sha256(
                         f"conversation|{message_index}|{message.get('time', '')}|{message.get('content', '')}".encode(
                             "utf-8"
@@ -2867,6 +3278,7 @@ def render_conversation() -> None:
                         stream_placeholder=stream_placeholder,
                     )
                 stream_placeholder.markdown(result["answer"])
+                render_answer_quality(result, min_score)
                 render_spoken_answer(
                     result["answer"],
                     voice_settings,
@@ -2901,7 +3313,7 @@ def render_conversation() -> None:
 
 
 def render_retrieval_audit() -> None:
-    render_header("Retrieval Audit", "Inspect semantic matches before answer generation.")
+    render_header("Retrieval Audit", "Inspect why chunks are selected before answer generation.")
 
     embedding_model = model_selectbox(
         "Knowledge index",
@@ -2917,17 +3329,54 @@ def render_retrieval_audit() -> None:
     store = get_vector_store(embedding_model)
 
     if store.is_empty:
-        st.info("Index documents before running retrieval audits.")
+        render_index_empty_state("Retrieval Audit", "audit_empty_index")
         return
 
+    st.markdown(
+        """
+        <div class="audit-guide-grid">
+            <div class="audit-guide-card">
+                <div class="audit-guide-title">Semantic match</div>
+                <div class="audit-guide-copy">Compares the question vector with stored chunk vectors.</div>
+            </div>
+            <div class="audit-guide-card">
+                <div class="audit-guide-title">Keyword match</div>
+                <div class="audit-guide-copy">Rewards exact names, IDs, dates, and file terms.</div>
+            </div>
+            <div class="audit-guide-card">
+                <div class="audit-guide-title">Hybrid rank</div>
+                <div class="audit-guide-copy">Combines semantic and keyword evidence for final ordering.</div>
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
     query = st.text_input("Search query")
-    col_a, col_b = st.columns([1, 1])
-    top_k = col_a.slider("Top K", min_value=1, max_value=20, value=runtime_settings.top_k, key="audit_top_k")
-    min_score = col_b.slider("Minimum similarity", min_value=0.0, max_value=1.0, value=0.0, step=0.01, key="audit_min_score")
+    col_a, col_b, col_c = st.columns([1, 1, 1])
+    search_mode = col_a.segmented_control(
+        "Search mode",
+        ["Hybrid", "Semantic", "Keyword"],
+        default="Hybrid",
+        key="audit_search_mode",
+    )
+    top_k = col_b.slider("Top K", min_value=1, max_value=20, value=runtime_settings.top_k, key="audit_top_k")
+    min_score = col_c.slider(
+        "Minimum score",
+        min_value=0.0,
+        max_value=1.0,
+        value=0.0,
+        step=0.01,
+        key="audit_min_score",
+    )
 
     if st.button("Run retrieval audit", type="primary", disabled=not query.strip()):
         with st.spinner("Searching vector index"):
-            results = semantic_search(query, store, top_k=top_k, active_settings=runtime_settings)
+            results = Retriever(store, runtime_settings).retrieve(
+                query,
+                top_k=top_k,
+                search_mode=str(search_mode).lower(),
+            )
         filtered = [item for item in results if float(item.get("score", 0.0)) >= min_score]
 
         if not filtered:
@@ -2937,12 +3386,15 @@ def render_retrieval_audit() -> None:
         rows = []
         for item in filtered:
             metadata = item.get("metadata", {})
+            retrieval_method = item.get("retrieval_method") or metadata.get("retrieval_method") or str(search_mode).lower()
             rows.append(
                 {
                     "Score": round(float(item.get("score", 0.0)), 4),
+                    "Match": str(retrieval_method).title(),
                     "Document": metadata.get("file_name"),
                     "Page": metadata.get("page_number") or "",
                     "Chunk": metadata.get("chunk_index"),
+                    "Why selected": retrieval_reason(retrieval_method),
                     "Preview": item.get("text", "")[:220],
                 }
             )
@@ -2950,9 +3402,11 @@ def render_retrieval_audit() -> None:
 
         for index, item in enumerate(filtered, start=1):
             metadata = item.get("metadata", {})
+            retrieval_method = item.get("retrieval_method") or metadata.get("retrieval_method") or str(search_mode).lower()
             with st.expander(
-                f"Match {index}: {metadata.get('file_name', 'Unknown')} - score {float(item.get('score', 0.0)):.2f}"
+                f"Match {index}: {metadata.get('file_name', 'Unknown')} - {str(retrieval_method).title()} - score {float(item.get('score', 0.0)):.2f}"
             ):
+                st.caption(retrieval_reason(retrieval_method))
                 st.write(item.get("text", ""))
 
 
@@ -2971,7 +3425,7 @@ def render_documents() -> None:
     st.session_state.embedding_model = embedding_model
     rows = document_rows(embedding_model)
     if not rows:
-        st.info("No documents indexed for the current embedding model.")
+        render_index_empty_state("Documents", "documents_empty_index")
         return
 
     filter_text = st.text_input("Filter documents")
@@ -3274,7 +3728,7 @@ def main() -> None:
         return
 
     if not can_access_nav(st.session_state.nav_selection):
-        st.session_state.nav_selection = "Dashboard"
+        st.session_state.nav_selection = default_nav_selection()
 
     navigation_mode = active_navigation_mode()
     selected = st.session_state.nav_selection
