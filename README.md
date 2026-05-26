@@ -13,6 +13,29 @@ Access the deployed Streamlit Community Cloud app here:
 https://enterprise-rag-vbhjbfxe6xrewsvnudhuoi.streamlit.app/
 ```
 
+## Walkthrough
+
+![Enterprise RAG walkthrough](docs/assets/enterprise-rag-walkthrough.gif)
+
+## Architecture
+
+```mermaid
+flowchart LR
+    A[Upload documents] --> B[Parse text, tables, and images]
+    B --> C[Chunk with tiktoken]
+    C --> D[Create OpenAI embeddings]
+    D --> E[Store vectors in FAISS]
+    E --> F[Embed user question]
+    F --> G[Retrieve top-k chunks]
+    G --> H[Build grounded prompt]
+    H --> I[Generate LLM answer]
+    I --> J[Show citations and feedback]
+```
+
+The local knowledge index is stored under `data/index/<embedding-model>/`.
+FAISS keeps the numerical vectors in `index.faiss`, while `chunks.json` and
+`documents.json` keep the source text and metadata needed for citations.
+
 ## Project Structure
 
 ```text
@@ -28,6 +51,7 @@ https://enterprise-rag-vbhjbfxe6xrewsvnudhuoi.streamlit.app/
 |-- streamlit_app.py
 |-- usage_store.py
 |-- vector_store.py
+|-- docs/assets/          # README walkthrough media
 |-- requirements.txt
 |-- .streamlit/config.toml
 `-- data/                 # Created at runtime; ignored by git
