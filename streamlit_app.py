@@ -224,6 +224,13 @@ def authenticate(username: str, password: str) -> str | None:
     return None
 
 
+def sign_out_current_user() -> None:
+    st.session_state.authenticated = False
+    st.session_state.role = "User"
+    st.session_state.username = ""
+    st.session_state.nav_selection = "Dashboard"
+
+
 def render_identity_controls() -> None:
     st.sidebar.markdown('<div class="sidebar-section-label">Identity</div>', unsafe_allow_html=True)
 
@@ -231,10 +238,7 @@ def render_identity_controls() -> None:
         st.sidebar.write(f"Signed in as `{st.session_state.username or current_role().lower()}`")
         st.sidebar.write(f"Role: `{current_role()}`")
         if st.sidebar.button("Sign out", use_container_width=True):
-            st.session_state.authenticated = False
-            st.session_state.role = "User"
-            st.session_state.username = ""
-            st.session_state.nav_selection = "Dashboard"
+            sign_out_current_user()
             st.rerun()
         return
 
@@ -1521,10 +1525,7 @@ def render_workspace_nav(selected: str) -> None:
         if settings.auth_enabled:
             with action_col:
                 if st.button("Sign out", key="workspace_sign_out", use_container_width=True):
-                    st.session_state.authenticated = False
-                    st.session_state.role = "User"
-                    st.session_state.username = ""
-                    st.session_state.nav_selection = "Dashboard"
+                    sign_out_current_user()
                     st.rerun()
 
 
@@ -1544,6 +1545,13 @@ def render_app_sidebar(selected: str) -> str:
             """,
             unsafe_allow_html=True,
         )
+        if settings.auth_enabled:
+            st.caption(f"Signed in as {st.session_state.username or current_role().lower()} - {current_role()}")
+            if st.button("Sign out", key="app_sidebar_sign_out", use_container_width=True):
+                sign_out_current_user()
+                st.rerun()
+            st.divider()
+
         st.markdown('<div class="sidebar-section-label">Workspace</div>', unsafe_allow_html=True)
 
         for item in items:
@@ -1558,11 +1566,8 @@ def render_app_sidebar(selected: str) -> str:
                 st.rerun()
 
         st.divider()
-        st.markdown('<div class="sidebar-section-label">Session</div>', unsafe_allow_html=True)
-        if settings.auth_enabled:
-            st.write(f"`{st.session_state.username or current_role().lower()}`")
-            st.write(f"`{current_role()}`")
-        else:
+        if not settings.auth_enabled:
+            st.markdown('<div class="sidebar-section-label">Session</div>', unsafe_allow_html=True)
             st.write(f"`{current_role()}`")
 
         st.markdown('<div class="sidebar-section-label">Runtime</div>', unsafe_allow_html=True)
