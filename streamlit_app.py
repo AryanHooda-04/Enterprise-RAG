@@ -4,12 +4,18 @@ import hashlib
 import html
 import json
 import logging
+from io import BytesIO
 from collections import Counter
 from datetime import datetime
 from pathlib import Path
 from threading import Lock
 from uuid import uuid4
 
+import pandas as pd
+import plotly.express as px
+from reportlab.lib.pagesizes import letter
+from reportlab.lib.styles import getSampleStyleSheet
+from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer
 import streamlit as st
 
 from audio_io import response_language, synthesize_speech, transcribe_audio
@@ -44,6 +50,7 @@ logger = logging.getLogger(__name__)
 PRIMARY_NAV_ITEMS = (
     "Ask",
     "Conversation",
+    "Agent",
 )
 KNOWLEDGE_NAV_ITEMS = (
     "Dashboard",
@@ -111,6 +118,8 @@ def init_session_state() -> None:
     st.session_state.setdefault("tts_voice", settings.openai_tts_voice)
     st.session_state.setdefault("speech_audio_cache", {})
     st.session_state.setdefault("last_ask_result", None)
+    st.session_state.setdefault("last_agent_result", None)
+    st.session_state.setdefault("agent_history", [])
     st.session_state.setdefault("feedback_submissions", {})
     st.session_state.setdefault("ingestion_queue", [])
     st.session_state.setdefault("ask_session_id", uuid4().hex)
@@ -888,6 +897,42 @@ def inject_enterprise_styles() -> None:
             overflow-wrap: anywhere;
         }
 
+        .agent-tool-grid {
+            display: grid;
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+            gap: 0.65rem;
+            margin: 0.6rem 0 1rem;
+        }
+
+        .agent-tool-card {
+            border: 1px solid var(--rag-border);
+            background: rgba(23, 29, 38, 0.58);
+            border-radius: 8px;
+            padding: 0.75rem;
+            min-height: 5.1rem;
+        }
+
+        .agent-tool-title {
+            color: var(--rag-text);
+            font-size: 0.9rem;
+            font-weight: 800;
+            margin-bottom: 0.25rem;
+        }
+
+        .agent-tool-copy {
+            color: var(--rag-muted);
+            font-size: 0.78rem;
+            line-height: 1.4;
+        }
+
+        .agent-plan {
+            border-left: 3px solid var(--rag-green);
+            background: rgba(47, 191, 113, 0.1);
+            border-radius: 6px;
+            padding: 0.75rem 0.9rem;
+            margin: 0.75rem 0;
+        }
+
         .st-key-conversation_chat_shell,
         .st-key-ask_chat_shell {
             max-width: 980px;
@@ -1076,7 +1121,8 @@ def inject_enterprise_styles() -> None:
         @media (max-width: 900px) {
             .metric-row,
             .evidence-summary,
-            .audit-guide-grid {
+            .audit-guide-grid,
+            .agent-tool-grid {
                 grid-template-columns: repeat(2, minmax(0, 1fr));
             }
             .ingestion-steps {
@@ -1088,6 +1134,7 @@ def inject_enterprise_styles() -> None:
             .metric-row,
             .evidence-summary,
             .audit-guide-grid,
+            .agent-tool-grid,
             .ingestion-steps {
                 grid-template-columns: 1fr;
             }
@@ -1138,7 +1185,8 @@ def inject_enterprise_styles() -> None:
             .evidence-chip,
             .source-card,
             .ingestion-step,
-            .audit-guide-card {
+            .audit-guide-card,
+            .agent-tool-card {
                 background: rgba(255, 255, 255, 0.86);
             }
             </style>
@@ -2021,7 +2069,250 @@ def retrieval_reason(method: str | None) -> str:
         return "Included as neighboring context around a stronger retrieved match."
     if normalized == "document-overview":
         return "Included to provide broad document context for an overview-style question."
+    if normalized == "document-selection":
+        return "Included because the user selected this document as the agent's focus."
     return "Selected because the query embedding is close to this chunk embedding."
+
+
+AGENT_TOOL_LABELS = {
+    "search_documents": "Search Documents",
+    "summarize_documents": "Summarize Documents",
+    "compare_documents": "Compare Documents",
+    "generate_report": "Generate Report",
+}
+
+
+def choose_agent_tool(goal: str, requested_tool: str, selected_hashes: list[str]) -> str:
+    if requested_tool != "Auto":
+        return requested_tool
+
+    lowered = goal.lower()
+    if any(term in lowered for term in ("compare", "difference", "versus", " vs ")):
+        return "compare_documents" if len(selected_hashes) >= 2 else "search_documents"
+    if any(term in lowered for term in ("report", "brief", "write-up", "writeup", "executive summary")):
+        return "generate_report"
+    if any(term in lowered for term in ("summarize", "summary", "overview", "key points", "main points")):
+        return "summarize_documents"
+    return "search_documents"
+
+
+def selected_document_filters(selected_hashes: list[str]) -> dict | None:
+    return {"document_hashes": selected_hashes} if selected_hashes else None
+
+
+def collect_document_context_chunks(
+    store: VectorStore,
+    selected_hashes: list[str],
+    *,
+    limit_per_document: int = 8,
+) -> list[dict]:
+    allowed = set(selected_hashes)
+    grouped: dict[str, list[dict]] = {}
+    for record in store.chunks:
+        metadata = record.get("metadata", {})
+        file_hash = metadata.get("file_hash")
+        if allowed and file_hash not in allowed:
+            continue
+        grouped.setdefault(str(file_hash), []).append(record)
+
+    chunks: list[dict] = []
+    for records in grouped.values():
+        for record in records[:limit_per_document]:
+            chunks.append(
+                {
+                    "text": record.get("text", ""),
+                    "metadata": record.get("metadata", {}),
+                    "score": 0.8,
+                    "semantic_score": 0.0,
+                    "keyword_score": 0.0,
+                    "retrieval_method": "document-selection",
+                }
+            )
+    return chunks
+
+
+def agent_prompt_for_tool(tool_name: str, goal: str, selected_documents: list[str]) -> str:
+    selected_text = ", ".join(selected_documents) if selected_documents else "the retrieved documents"
+    if tool_name == "summarize_documents":
+        return (
+            f"Summarize {selected_text} for the user goal below. "
+            "Return concise sections: overview, key facts, risks or gaps, and useful citations.\n\n"
+            f"Goal: {goal}"
+        )
+    if tool_name == "compare_documents":
+        return (
+            f"Compare {selected_text} for the user goal below. "
+            "Return a structured comparison with similarities, differences, contradictions, and citation-backed notes.\n\n"
+            f"Goal: {goal}"
+        )
+    if tool_name == "generate_report":
+        return (
+            f"Create a professional Markdown report for {selected_text}. "
+            "Use headings, concise bullets, key evidence, risks, recommended next steps, and cite the provided sources.\n\n"
+            f"Goal: {goal}"
+        )
+    return goal
+
+
+def run_agentic_rag(
+    *,
+    goal: str,
+    requested_tool: str,
+    chat_model: str,
+    embedding_model: str,
+    selected_hashes: list[str],
+    top_k: int,
+    min_score: float,
+    search_mode: str,
+) -> dict:
+    runtime_settings = active_settings(chat_model=chat_model, embedding_model=embedding_model)
+    store = get_vector_store(embedding_model)
+    pipeline = get_pipeline(chat_model, embedding_model)
+    documents_by_hash = {document["file_hash"]: document for document in store.list_documents()}
+    selected_names = [
+        documents_by_hash.get(file_hash, {}).get("file_name", file_hash) for file_hash in selected_hashes
+    ]
+    tool_name = choose_agent_tool(goal, requested_tool, selected_hashes)
+    filters = selected_document_filters(selected_hashes)
+    plan = [
+        f"Selected tool: {AGENT_TOOL_LABELS.get(tool_name, tool_name)}",
+        f"Search mode: {search_mode.title()}",
+        f"Evidence target: top {top_k} chunks",
+    ]
+
+    if tool_name == "search_documents":
+        result = generate_rag_result(
+            query=goal,
+            chat_model=chat_model,
+            embedding_model=embedding_model,
+            top_k=top_k,
+            min_score=min_score,
+            response_language_name="English",
+            filters=filters,
+            search_mode=search_mode,
+        )
+        plan.append("Answered directly from retrieved evidence.")
+        return {
+            "tool": tool_name,
+            "plan": plan,
+            "answer": result["answer"],
+            "result": result,
+            "report_markdown": build_agent_report_markdown(goal, tool_name, plan, result),
+            "runtime_settings": runtime_settings,
+            "search_mode": search_mode,
+            "filters": filters,
+        }
+
+    if tool_name in {"summarize_documents", "compare_documents"} and selected_hashes:
+        chunks = collect_document_context_chunks(store, selected_hashes, limit_per_document=8)
+        plan.append("Used selected document chunks instead of open-ended search.")
+    else:
+        retrieval_query = f"{tool_name.replace('_', ' ')}: {goal}"
+        chunks = pipeline.retrieve_chunks(
+            retrieval_query,
+            top_k=top_k,
+            min_score=min_score,
+            filters=filters,
+            search_mode=search_mode,
+        )
+        plan.append("Retrieved evidence using the user goal.")
+
+    if not chunks:
+        result = {
+            "answer": "I don't know",
+            "sources": [],
+            "source_metadata": [],
+            "confidence": 0.0,
+        }
+        return {
+            "tool": tool_name,
+            "plan": plan,
+            "answer": result["answer"],
+            "result": result,
+            "report_markdown": build_agent_report_markdown(goal, tool_name, plan, result),
+            "runtime_settings": runtime_settings,
+            "search_mode": search_mode,
+            "filters": filters,
+        }
+
+    agent_prompt = agent_prompt_for_tool(tool_name, goal, selected_names)
+    answer_parts: list[str] = []
+    for delta in pipeline.stream_answer(pipeline.build_prompt(agent_prompt, chunks, response_language="English")):
+        answer_parts.append(delta)
+    answer = "".join(answer_parts).strip() or "I don't know"
+    result = pipeline.result_from_answer(answer, chunks)
+    return {
+        "tool": tool_name,
+        "plan": plan,
+        "answer": result["answer"],
+        "result": result,
+        "report_markdown": build_agent_report_markdown(goal, tool_name, plan, result),
+        "runtime_settings": runtime_settings,
+        "search_mode": search_mode,
+        "filters": filters,
+    }
+
+
+def build_agent_report_markdown(goal: str, tool_name: str, plan: list[str], result: dict) -> str:
+    lines = [
+        "# Agentic RAG Report",
+        "",
+        f"**Goal:** {goal.strip()}",
+        f"**Tool used:** {AGENT_TOOL_LABELS.get(tool_name, tool_name)}",
+        f"**Confidence:** {float(result.get('confidence', 0.0) or 0.0):.2f}",
+        "",
+        "## Agent Plan",
+    ]
+    lines.extend(f"- {step}" for step in plan)
+    lines.extend(["", "## Answer", "", result.get("answer", "I don't know"), "", "## Citations"])
+    sources = result.get("sources", [])
+    metadata_items = result.get("source_metadata", [])
+    if not sources:
+        lines.append("- No citations available.")
+    for index, (source, metadata) in enumerate(zip(sources, metadata_items), start=1):
+        file_name = metadata.get("file_name") or "Unknown"
+        page = metadata.get("page_number")
+        page_text = f", page {page}" if page else ""
+        score = float(metadata.get("score", 0.0) or 0.0)
+        excerpt = " ".join(str(source).split())[:320]
+        lines.append(f"- Source {index}: {file_name}{page_text}, score {score:.2f}. {excerpt}")
+    return "\n".join(lines)
+
+
+def agent_pdf_report(markdown_text: str) -> bytes:
+    buffer = BytesIO()
+    document = SimpleDocTemplate(buffer, pagesize=letter, title="Agentic RAG Report")
+    styles = getSampleStyleSheet()
+    story = []
+    for raw_line in markdown_text.splitlines():
+        line = raw_line.strip()
+        if not line:
+            story.append(Spacer(1, 8))
+            continue
+        if line.startswith("# "):
+            story.append(Paragraph(html.escape(line[2:]), styles["Title"]))
+        elif line.startswith("## "):
+            story.append(Paragraph(html.escape(line[3:]), styles["Heading2"]))
+        elif line.startswith("- "):
+            story.append(Paragraph(html.escape(line), styles["BodyText"]))
+        else:
+            story.append(Paragraph(html.escape(line), styles["BodyText"]))
+    document.build(story)
+    return buffer.getvalue()
+
+
+def agent_evidence_dataframe(result: dict) -> pd.DataFrame:
+    rows = []
+    for metadata in result.get("source_metadata", []):
+        rows.append(
+            {
+                "Document": metadata.get("file_name") or "Unknown",
+                "Retrieval": metadata.get("retrieval_method") or "semantic",
+                "Score": float(metadata.get("score", 0.0) or 0.0),
+                "Page": metadata.get("page_number") or "",
+            }
+        )
+    return pd.DataFrame(rows)
 
 
 def generate_rag_result(
@@ -3312,6 +3603,227 @@ def render_conversation() -> None:
             st.rerun()
 
 
+def render_agent() -> None:
+    render_header("Agentic RAG", "Let the app choose a retrieval tool, reason over evidence, and produce a report.")
+    embedding_model = model_selectbox(
+        "Knowledge index",
+        EMBEDDING_MODEL_OPTIONS,
+        active_embedding_model(),
+        "agent_embedding_model",
+        disabled=not can_change_models(),
+    )
+    if not can_change_models():
+        embedding_model = active_embedding_model()
+    st.session_state.embedding_model = embedding_model
+
+    store = get_vector_store(embedding_model)
+    if store.is_empty:
+        render_index_empty_state("Agent", "agent_empty_index")
+        return
+
+    st.markdown(
+        """
+        <div class="agent-tool-grid">
+            <div class="agent-tool-card">
+                <div class="agent-tool-title">Search</div>
+                <div class="agent-tool-copy">Answer directly from top-k source chunks.</div>
+            </div>
+            <div class="agent-tool-card">
+                <div class="agent-tool-title">Summarize</div>
+                <div class="agent-tool-copy">Condense selected documents into key facts and risks.</div>
+            </div>
+            <div class="agent-tool-card">
+                <div class="agent-tool-title">Compare</div>
+                <div class="agent-tool-copy">Contrast two or more documents with cited differences.</div>
+            </div>
+            <div class="agent-tool-card">
+                <div class="agent-tool-title">Report</div>
+                <div class="agent-tool-copy">Generate a Markdown and PDF-ready evidence report.</div>
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    documents = store.list_documents()
+    document_options = {document["file_hash"]: document.get("file_name", document["file_hash"]) for document in documents}
+
+    with st.container(border=True, key="agent_settings"):
+        with st.expander("Agent controls", expanded=False):
+            model_col, tool_col, retrieval_col = st.columns([1, 1, 1], gap="large")
+            with model_col:
+                chat_model = model_selectbox(
+                    "Answer model",
+                    CHAT_MODEL_OPTIONS,
+                    active_chat_model(),
+                    "agent_chat_model",
+                    disabled=not can_change_models(),
+                )
+                if not can_change_models():
+                    chat_model = active_chat_model()
+            with tool_col:
+                requested_tool_label = st.selectbox(
+                    "Agent tool",
+                    ["Auto", "Search Documents", "Summarize Documents", "Compare Documents", "Generate Report"],
+                    key="agent_requested_tool",
+                )
+                requested_tool = {
+                    "Auto": "Auto",
+                    "Search Documents": "search_documents",
+                    "Summarize Documents": "summarize_documents",
+                    "Compare Documents": "compare_documents",
+                    "Generate Report": "generate_report",
+                }[requested_tool_label]
+                selected_documents = st.multiselect(
+                    "Focus documents",
+                    options=list(document_options.keys()),
+                    format_func=lambda value: document_options.get(value, value),
+                    key="agent_focus_documents",
+                    help="Optional. Select documents for summarization, comparison, or focused search.",
+                )
+            with retrieval_col:
+                search_mode = st.segmented_control(
+                    "Search mode",
+                    ["Hybrid", "Semantic", "Keyword"],
+                    default="Hybrid",
+                    key="agent_search_mode",
+                )
+                runtime_settings = active_settings(chat_model=chat_model, embedding_model=embedding_model)
+                top_k = st.slider("Top K", 1, 20, runtime_settings.top_k, key="agent_top_k")
+                min_score = st.slider("Minimum score", 0.0, 1.0, 0.0, step=0.01, key="agent_min_score")
+
+    goal = st.text_area(
+        "Agent goal",
+        key="agent_goal",
+        height=110,
+        placeholder="Example: Compare the Heidi and Black Beauty documents and generate a short report with citations.",
+    )
+    compare_blocked = requested_tool == "compare_documents" and len(selected_documents) < 2
+    if compare_blocked:
+        st.warning("Compare Documents needs at least two focus documents.")
+
+    run_col, clear_col = st.columns([1, 0.24], gap="small")
+    run_clicked = run_col.button(
+        "Run agent",
+        type="primary",
+        disabled=not goal.strip() or compare_blocked,
+        use_container_width=True,
+    )
+    if clear_col.button("Clear", use_container_width=True):
+        st.session_state.last_agent_result = None
+        st.rerun()
+
+    if run_clicked:
+        with st.status("Planning tool call and gathering evidence", expanded=True):
+            agent_result = run_agentic_rag(
+                goal=goal.strip(),
+                requested_tool=requested_tool,
+                chat_model=chat_model,
+                embedding_model=embedding_model,
+                selected_hashes=selected_documents,
+                top_k=top_k,
+                min_score=min_score,
+                search_mode=str(search_mode).lower(),
+            )
+        st.session_state.last_agent_result = agent_result
+        st.session_state.agent_history.append(
+            {
+                "time": datetime.now().strftime("%H:%M:%S"),
+                "goal": goal.strip(),
+                "tool": AGENT_TOOL_LABELS.get(agent_result["tool"], agent_result["tool"]),
+                "confidence": agent_result["result"].get("confidence", 0.0),
+                "sources": len(agent_result["result"].get("sources", [])),
+            }
+        )
+        st.rerun()
+
+    last = st.session_state.last_agent_result
+    if not last:
+        st.markdown(
+            """
+            <div class="conversation-empty-state">
+                <div>
+                    <div class="conversation-empty-title">What should the agent do?</div>
+                    <div class="rag-subtle">Ask it to search, summarize, compare, or generate a cited report.</div>
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+        return
+
+    result = last["result"]
+    st.markdown(
+        f"""
+        <div class="agent-plan">
+            <strong>Agent plan</strong><br>
+            {escape_html(" | ".join(last["plan"]))}
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+    st.subheader("Agent Answer")
+    st.markdown(last["answer"])
+    render_answer_quality(result, min_score)
+
+    evidence_tab, report_tab, citations_tab, history_tab = st.tabs(
+        ["Evidence", "Report", "Citations", "History"]
+    )
+    with evidence_tab:
+        evidence_df = agent_evidence_dataframe(result)
+        if evidence_df.empty:
+            st.info("No evidence was retrieved for this agent run.")
+        else:
+            st.dataframe(evidence_df, hide_index=True, use_container_width=True)
+            chart_df = evidence_df.groupby("Document", as_index=False)["Score"].max()
+            fig = px.bar(
+                chart_df,
+                x="Document",
+                y="Score",
+                title="Top Evidence Score by Document",
+                range_y=[0, 1],
+            )
+            fig.update_layout(margin=dict(l=10, r=10, t=46, b=10), height=340)
+            st.plotly_chart(fig, use_container_width=True)
+
+    with report_tab:
+        report_markdown = last["report_markdown"]
+        st.markdown(report_markdown)
+        export_col_a, export_col_b = st.columns(2)
+        export_col_a.download_button(
+            "Download Markdown report",
+            report_markdown,
+            "agentic_rag_report.md",
+            "text/markdown",
+            use_container_width=True,
+        )
+        export_col_b.download_button(
+            "Download PDF report",
+            agent_pdf_report(report_markdown),
+            "agentic_rag_report.pdf",
+            "application/pdf",
+            use_container_width=True,
+        )
+
+    with citations_tab:
+        render_answer_sources(
+            result,
+            min_score,
+            last["runtime_settings"],
+            key_prefix="agent",
+        )
+
+    with history_tab:
+        if st.session_state.agent_history:
+            st.dataframe(
+                pd.DataFrame(list(reversed(st.session_state.agent_history))),
+                hide_index=True,
+                use_container_width=True,
+            )
+        else:
+            st.caption("No agent runs yet.")
+
+
 def render_retrieval_audit() -> None:
     render_header("Retrieval Audit", "Inspect why chunks are selected before answer generation.")
 
@@ -3706,6 +4218,8 @@ def render_selected_page(selected: str) -> None:
         render_ask()
     elif selected == "Conversation":
         render_conversation()
+    elif selected == "Agent":
+        render_agent()
     elif selected == "Ingestion":
         render_ingestion()
     elif selected == "Retrieval Audit":

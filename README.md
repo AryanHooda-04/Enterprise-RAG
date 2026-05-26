@@ -27,9 +27,9 @@ flowchart LR
     D --> E[Store vectors in FAISS]
     E --> F[Embed user question]
     F --> G[Retrieve top-k chunks]
-    G --> H[Build grounded prompt]
-    H --> I[Generate LLM answer]
-    I --> J[Show citations and feedback]
+    G --> H[Build grounded prompt or agent plan]
+    H --> I[Generate LLM answer or report]
+    I --> J[Show citations, feedback, and exports]
 ```
 
 The local knowledge index is stored under `data/index/<embedding-model>/`.
@@ -106,6 +106,7 @@ The enterprise UI is organized into:
 - `Dashboard`: index readiness, document volume, session activity, governance markers.
 - `Ask`: streaming source-grounded answers with text or voice input, spoken answers, hybrid search, source filters, feedback buttons, source previews, chat model, knowledge index, Top K, and similarity threshold controls.
 - `Conversation`: streaming multi-turn RAG chat with text or voice turns, retained context, citations, spoken answers, source filters, feedback buttons, and Markdown/JSON export.
+- `Agent`: agentic RAG workflow that selects search, summarize, compare, or report tools; shows the plan, evidence chart, citations, Markdown export, and PDF report export.
 - `Ingestion`: multi-file and folder upload with embedding model, vision model, chunking controls, queued/indexing/completed/failed statuses, and retry.
 - `Retrieval Audit`: semantic-search inspection before answer generation.
 - `Documents`: filterable inventory with CSV export.
