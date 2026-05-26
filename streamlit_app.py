@@ -739,7 +739,8 @@ def inject_enterprise_styles() -> None:
             margin-bottom: 0.55rem;
         }
 
-        .st-key-conversation_chat_shell {
+        .st-key-conversation_chat_shell,
+        .st-key-ask_chat_shell {
             max-width: 980px;
             margin: 0 auto;
         }
@@ -785,27 +786,32 @@ def inject_enterprise_styles() -> None:
             margin-bottom: 0.35rem;
         }
 
-        .st-key-conversation_settings {
+        .st-key-conversation_settings,
+        .st-key-ask_settings {
             border-color: var(--rag-border) !important;
             background: rgba(23, 29, 38, 0.72);
             border-radius: 8px;
             margin-bottom: 0.9rem;
         }
 
-        .st-key-conversation_chat_shell [data-testid="stChatMessage"] {
+        .st-key-conversation_chat_shell [data-testid="stChatMessage"],
+        .st-key-ask_chat_shell [data-testid="stChatMessage"] {
             border-bottom: 1px solid rgba(168, 176, 188, 0.12);
             padding: 1rem 0;
         }
 
-        .st-key-conversation_chat_shell [data-testid="stChatMessage"]:last-of-type {
+        .st-key-conversation_chat_shell [data-testid="stChatMessage"]:last-of-type,
+        .st-key-ask_chat_shell [data-testid="stChatMessage"]:last-of-type {
             border-bottom: 0;
         }
 
-        .st-key-conversation_chat_shell [data-testid="stChatMessage"] [data-testid="stMarkdownContainer"] {
+        .st-key-conversation_chat_shell [data-testid="stChatMessage"] [data-testid="stMarkdownContainer"],
+        .st-key-ask_chat_shell [data-testid="stChatMessage"] [data-testid="stMarkdownContainer"] {
             line-height: 1.55;
         }
 
-        .st-key-conversation_chat_shell [data-testid="stChatMessage"] [data-testid="stExpander"] {
+        .st-key-conversation_chat_shell [data-testid="stChatMessage"] [data-testid="stExpander"],
+        .st-key-ask_chat_shell [data-testid="stChatMessage"] [data-testid="stExpander"] {
             margin-top: 0.45rem;
         }
 
@@ -1360,6 +1366,7 @@ def latest_conversation_citation_chunks(store: VectorStore, limit: int = 6) -> l
 def reset_ask_chat() -> None:
     for key in (
         "ask_query",
+        "ask_voice_review",
         "ask_transcript",
         "ask_transcript_language",
         "ask_audio_hash",
@@ -2349,176 +2356,245 @@ def render_answer_sources(
 
 def render_ask() -> None:
     render_header("Ask Workspace", "Generate source-grounded answers with auditable retrieval context.")
-    _, action_col = st.columns([1, 0.16])
-    with action_col:
-        if st.button("New chat", key="ask_new_chat", use_container_width=True):
-            reset_ask_chat()
-            st.rerun()
+    with st.container(key="ask_chat_shell"):
+        with st.container(border=True, key="ask_settings"):
+            with st.expander("Ask settings", expanded=False):
+                model_col, retrieval_col, voice_col = st.columns([1, 1.15, 1], gap="large")
+                with model_col:
+                    st.subheader("Models")
+                    chat_model = model_selectbox(
+                        "Answer model",
+                        CHAT_MODEL_OPTIONS,
+                        active_chat_model(),
+                        "ask_chat_model",
+                        disabled=not can_change_models(),
+                    )
+                    embedding_model = model_selectbox(
+                        "Knowledge index",
+                        EMBEDDING_MODEL_OPTIONS,
+                        active_embedding_model(),
+                        "ask_embedding_model",
+                        disabled=not can_change_models(),
+                    )
+                    if not can_change_models():
+                        chat_model = active_chat_model()
+                        embedding_model = active_embedding_model()
+                        st.caption("Model changes require Admin role.")
 
-    left, right = st.columns([1.45, 0.8], gap="large")
-    with right:
-        st.subheader("Model Selection")
-        chat_model = model_selectbox(
-            "Answer model",
-            CHAT_MODEL_OPTIONS,
-            active_chat_model(),
-            "ask_chat_model",
-            disabled=not can_change_models(),
+                st.session_state.chat_model = chat_model
+                st.session_state.embedding_model = embedding_model
+                store = get_vector_store(embedding_model)
+
+                with retrieval_col:
+                    st.subheader("Retrieval")
+                    search_mode = st.segmented_control(
+                        "Search mode",
+                        ["Hybrid", "Semantic", "Keyword"],
+                        default="Hybrid",
+                        key="ask_search_mode",
+                        help="Hybrid combines semantic FAISS search with keyword/BM25-style matching.",
+                    )
+                    base_runtime_settings = active_settings(chat_model=chat_model, embedding_model=embedding_model)
+                    top_k = st.slider(
+                        "Top K",
+                        min_value=1,
+                        max_value=20,
+                        value=base_runtime_settings.top_k,
+                        key="ask_top_k",
+                    )
+                    min_score = st.slider(
+                        "Minimum similarity",
+                        min_value=0.0,
+                        max_value=1.0,
+                        value=0.0,
+                        step=0.01,
+                        key="ask_min_score",
+                    )
+                    show_prompt_policy = st.toggle("Show prompt policy", value=False, key="ask_show_prompt_policy")
+                    if show_prompt_policy:
+                        st.code(
+                            "Answer ONLY from the provided context. Always answer in the user language.",
+                            language="text",
+                        )
+                    source_filters = render_source_filters("ask", store, use_expander=False)
+
+                with voice_col:
+                    voice_settings = render_voice_settings("ask", compact=True)
+
+        runtime_settings = active_settings(
+            chat_model=chat_model,
+            embedding_model=embedding_model,
+            transcription_model=voice_settings["transcription_model"],
+            tts_model=voice_settings["tts_model"],
+            tts_voice=voice_settings["tts_voice"],
         )
-        embedding_model = model_selectbox(
-            "Knowledge index",
-            EMBEDDING_MODEL_OPTIONS,
-            active_embedding_model(),
-            "ask_embedding_model",
-            disabled=not can_change_models(),
-        )
-        if not can_change_models():
-            chat_model = active_chat_model()
-            embedding_model = active_embedding_model()
-            st.caption("Model changes require Admin role.")
-        st.session_state.chat_model = chat_model
-        st.session_state.embedding_model = embedding_model
-        voice_settings = render_voice_settings("ask")
 
-    store = get_vector_store(embedding_model)
-    if store.is_empty:
-        st.info("Index documents before asking questions.")
-        return
+        action_left, action_new = st.columns([1, 0.14], gap="small")
+        with action_left:
+            st.markdown(
+                f"""
+                <div class="conversation-action-row">
+                    <div>
+                        <div class="conversation-action-title">Enterprise RAG Ask</div>
+                        <div class="conversation-action-meta">{escape_html(active_embedding_model())} - latest answer workspace</div>
+                    </div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+        with action_new:
+            if st.button("New chat", key="ask_new_chat", use_container_width=True):
+                reset_ask_chat()
+                st.rerun()
 
-    runtime_settings = active_settings(
-        chat_model=chat_model,
-        embedding_model=embedding_model,
-        transcription_model=voice_settings["transcription_model"],
-        tts_model=voice_settings["tts_model"],
-        tts_voice=voice_settings["tts_voice"],
-    )
+        if store.is_empty:
+            st.info("Index documents before asking questions.")
+            return
 
-    with left:
         render_voice_input(
             "ask",
             "Speak your question",
             voice_settings,
             runtime_settings,
-            target_text_key="ask_query",
+            target_text_key="ask_voice_review",
         )
-        query = st.text_area(
-            "Question",
-            height=150,
-            placeholder="Ask a policy, process, or document question",
-            key="ask_query",
-        )
-    with right:
-        st.subheader("Retrieval Controls")
-        search_mode = st.segmented_control(
-            "Search mode",
-            ["Hybrid", "Semantic", "Keyword"],
-            default="Hybrid",
-            key="ask_search_mode",
-            help="Hybrid combines semantic FAISS search with keyword/BM25-style matching.",
-        )
-        source_filters = render_source_filters("ask", store)
-        top_k = st.slider("Top K", min_value=1, max_value=20, value=runtime_settings.top_k)
-        min_score = st.slider("Minimum similarity", min_value=0.0, max_value=1.0, value=0.0, step=0.01)
-        show_prompt_policy = st.toggle("Show prompt policy", value=False)
-        if show_prompt_policy:
-            st.code(
-                'Answer ONLY from the provided context. Always answer in the user language.',
-                language="text",
+        voice_prompt = ""
+        send_voice_prompt = False
+        if st.session_state.get("ask_voice_review"):
+            voice_prompt = st.text_area(
+                "Review voice question",
+                key="ask_voice_review",
+                height=90,
             )
-
-    if st.button("Generate answer", type="primary", disabled=not query.strip()):
-        answer_language = response_language(voice_settings["language"], query)
-        previous_ask = st.session_state.last_ask_result or {}
-        effective_filters = follow_up_filters(
-            query,
-            source_filters,
-            dominant_source_hashes(previous_ask.get("result")),
-            store.documents,
-        )
-        retrieval_query = contextual_follow_up_query(query, previous_ask, store.documents)
-        st.subheader("Answer")
-        stream_placeholder = st.empty()
-        with st.status("Retrieving context and streaming answer", expanded=False):
-            result = generate_rag_result(
-                query=query,
-                retrieval_query=retrieval_query,
-                chat_model=chat_model,
-                embedding_model=embedding_model,
-                top_k=top_k,
-                min_score=min_score,
-                response_language_name=answer_language,
-                filters=effective_filters,
-                search_mode=str(search_mode).lower(),
-                stream_placeholder=stream_placeholder,
-            )
-        stream_placeholder.empty()
-        feedback_key = hashlib.sha256(
-            "|".join(
-                [
-                    query.strip(),
-                    result.get("answer", ""),
-                    chat_model,
-                    embedding_model,
-                    datetime.now().isoformat(timespec="seconds"),
-                ]
-            ).encode("utf-8")
-        ).hexdigest()
-        st.session_state.last_ask_result = {
-            "feedback_key": feedback_key,
-            "query": query.strip(),
-            "answer_language": answer_language,
-            "result": result,
-            "runtime_settings": runtime_settings,
-            "voice_settings": voice_settings,
-            "min_score": min_score,
-            "search_mode": str(search_mode).lower(),
-            "filters": effective_filters,
-        }
-
-        st.session_state.query_history.append(
-            {
-                "time": datetime.now().strftime("%H:%M:%S"),
-                "query": query.strip(),
-                "language": answer_language,
-                "model": chat_model,
-                "index": embedding_model,
-                "search_mode": str(search_mode).lower(),
-                "confidence": result["confidence"],
-                "sources": len(result["sources"]),
-            }
-        )
-
-    if st.session_state.last_ask_result:
-        last = st.session_state.last_ask_result
-        result = last["result"]
-        st.subheader("Answer")
-        st.write(result["answer"])
-        render_spoken_answer(
-            result["answer"],
-            last["voice_settings"],
-            last["runtime_settings"],
-            language=last["answer_language"],
-            key_prefix="ask_answer",
-        )
-        render_feedback_controls(
-            feedback_key=f"ask_{last['feedback_key']}",
-            query=last["query"],
-            answer=result["answer"],
-            result=result,
-            runtime_settings=last["runtime_settings"],
-            search_mode=last["search_mode"],
-            filters=last["filters"],
-            context="ask",
-        )
-        render_answer_sources(result, last["min_score"], last["runtime_settings"], key_prefix="ask")
-
-    if st.session_state.query_history:
-        with st.expander("Query history"):
-            st.dataframe(
-                list(reversed(st.session_state.query_history)),
-                hide_index=True,
+            send_voice_prompt = st.button(
+                "Send voice question",
+                type="primary",
+                disabled=not voice_prompt.strip(),
                 use_container_width=True,
             )
+
+        if not st.session_state.last_ask_result:
+            st.markdown(
+                """
+                <div class="conversation-empty-state">
+                    <div>
+                        <div class="conversation-empty-title">What would you like to ask?</div>
+                    </div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+
+        if st.session_state.last_ask_result:
+            last = st.session_state.last_ask_result
+            result = last["result"]
+            with st.chat_message("user"):
+                st.write(last["query"])
+            with st.chat_message("assistant"):
+                st.write(result["answer"])
+                render_spoken_answer(
+                    result["answer"],
+                    last["voice_settings"],
+                    last["runtime_settings"],
+                    language=last["answer_language"],
+                    key_prefix="ask_answer",
+                )
+                with st.expander("Feedback", expanded=False):
+                    render_feedback_controls(
+                        feedback_key=f"ask_{last['feedback_key']}",
+                        query=last["query"],
+                        answer=result["answer"],
+                        result=result,
+                        runtime_settings=last["runtime_settings"],
+                        search_mode=last["search_mode"],
+                        filters=last["filters"],
+                        context="ask",
+                    )
+                with st.expander("Citations", expanded=False):
+                    render_answer_sources(result, last["min_score"], last["runtime_settings"], key_prefix="ask")
+
+        prompt = st.chat_input("Ask Enterprise RAG")
+        query = voice_prompt.strip() if send_voice_prompt else (prompt or "").strip()
+        if query:
+            answer_language = response_language(voice_settings["language"], query)
+            previous_ask = st.session_state.last_ask_result or {}
+            effective_filters = follow_up_filters(
+                query,
+                source_filters,
+                dominant_source_hashes(previous_ask.get("result")),
+                store.documents,
+            )
+            retrieval_query = contextual_follow_up_query(query, previous_ask, store.documents)
+            with st.chat_message("user"):
+                st.write(query)
+            with st.chat_message("assistant"):
+                stream_placeholder = st.empty()
+                with st.status("Retrieving context and streaming answer", expanded=False):
+                    result = generate_rag_result(
+                        query=query,
+                        retrieval_query=retrieval_query,
+                        chat_model=chat_model,
+                        embedding_model=embedding_model,
+                        top_k=top_k,
+                        min_score=min_score,
+                        response_language_name=answer_language,
+                        filters=effective_filters,
+                        search_mode=str(search_mode).lower(),
+                        stream_placeholder=stream_placeholder,
+                    )
+                stream_placeholder.markdown(result["answer"])
+                render_spoken_answer(
+                    result["answer"],
+                    voice_settings,
+                    runtime_settings,
+                    language=answer_language,
+                    key_prefix="ask_latest",
+                )
+
+            feedback_key = hashlib.sha256(
+                "|".join(
+                    [
+                        query.strip(),
+                        result.get("answer", ""),
+                        chat_model,
+                        embedding_model,
+                        datetime.now().isoformat(timespec="seconds"),
+                    ]
+                ).encode("utf-8")
+            ).hexdigest()
+            st.session_state.last_ask_result = {
+                "feedback_key": feedback_key,
+                "query": query.strip(),
+                "answer_language": answer_language,
+                "result": result,
+                "runtime_settings": runtime_settings,
+                "voice_settings": voice_settings,
+                "min_score": min_score,
+                "search_mode": str(search_mode).lower(),
+                "filters": effective_filters,
+            }
+
+            st.session_state.query_history.append(
+                {
+                    "time": datetime.now().strftime("%H:%M:%S"),
+                    "query": query.strip(),
+                    "language": answer_language,
+                    "model": chat_model,
+                    "index": embedding_model,
+                    "search_mode": str(search_mode).lower(),
+                    "confidence": result["confidence"],
+                    "sources": len(result["sources"]),
+                }
+            )
+            st.rerun()
+
+        if st.session_state.query_history:
+            with st.expander("Query history"):
+                st.dataframe(
+                    list(reversed(st.session_state.query_history)),
+                    hide_index=True,
+                    use_container_width=True,
+                )
 
 
 def conversation_context_prompt(new_prompt: str) -> str:
