@@ -95,6 +95,10 @@ def semantic_search(
     )
 
 
+def infer_document_hashes(query: str, documents: dict[str, dict]) -> list[str]:
+    return _infer_document_hashes(query, documents)
+
+
 def _annotate_semantic(results: list[dict]) -> list[dict]:
     annotated: list[dict] = []
     for result in results:

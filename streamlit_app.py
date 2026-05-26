@@ -29,7 +29,7 @@ from errors import RAGApplicationError
 from feedback_store import feedback_csv, feedback_jsonl, load_feedback, save_feedback
 from ingestion import generate_embeddings, ingest_file, safe_filename
 from rag_pipeline import RAGPipeline
-from retriever import semantic_search
+from retriever import infer_document_hashes, semantic_search
 from usage_store import load_usage, summarize_usage, usage_csv, usage_jsonl
 from vector_store import VectorStore
 
@@ -1145,8 +1145,16 @@ FOLLOW_UP_MARKERS = (
     " that ",
     " it ",
     " its ",
+    " she ",
+    " her ",
+    " hers ",
+    " he ",
+    " him ",
+    " his ",
     " they ",
     " them ",
+    " their ",
+    " theirs ",
     " these ",
     " those ",
     " the story ",
@@ -1154,6 +1162,12 @@ FOLLOW_UP_MARKERS = (
     " the book ",
     " this book ",
     " the horse ",
+    " grandfather",
+    " grandmother",
+    " father",
+    " mother",
+    " uncle",
+    " aunt",
     " owner",
     " master",
 )
@@ -1162,6 +1176,12 @@ FOLLOW_UP_MARKERS = (
 def is_follow_up_query(query: str) -> bool:
     normalized = f" {query.strip().lower()} "
     return any(marker in normalized for marker in FOLLOW_UP_MARKERS)
+
+
+def should_use_conversation_context(query: str, documents: dict[str, dict] | None = None) -> bool:
+    if not is_follow_up_query(query):
+        return False
+    return not (documents and infer_document_hashes(query, documents))
 
 
 def dominant_source_hashes(result: dict | None) -> list[str]:
@@ -1180,16 +1200,69 @@ def dominant_source_hashes(result: dict | None) -> list[str]:
 
 
 def latest_conversation_source_hashes() -> list[str]:
-    for message in reversed(st.session_state.conversation_messages):
-        if message.get("role") != "assistant":
-            continue
-        citations = message.get("citations") or message.get("result", {}).get("source_metadata", [])
+    for citations in latest_conversation_citation_groups():
         hashes = [metadata.get("file_hash") for metadata in citations if metadata.get("file_hash")]
         if hashes:
             counts = Counter(hashes)
             highest = max(counts.values())
             return [file_hash for file_hash, count in counts.items() if count == highest]
     return []
+
+
+def latest_conversation_citation_groups():
+    for message in reversed(st.session_state.conversation_messages):
+        if message.get("role") != "assistant":
+            continue
+        citations = message.get("citations") or message.get("result", {}).get("source_metadata", [])
+        if citations:
+            yield citations
+
+
+def latest_conversation_citation_chunks(store: VectorStore, limit: int = 6) -> list[dict]:
+    citations = next(latest_conversation_citation_groups(), [])
+    if not citations:
+        return []
+
+    lookup: dict[tuple[str, int], dict] = {}
+    for record in store.chunks:
+        metadata = record.get("metadata", {})
+        file_hash = metadata.get("file_hash")
+        chunk_index = metadata.get("chunk_index")
+        if file_hash is None or chunk_index is None:
+            continue
+        try:
+            lookup[(str(file_hash), int(chunk_index))] = record
+        except (TypeError, ValueError):
+            continue
+
+    pinned: list[dict] = []
+    seen: set[tuple[str, int]] = set()
+    for metadata in citations:
+        file_hash = metadata.get("file_hash")
+        chunk_index = metadata.get("chunk_index")
+        if file_hash is None or chunk_index is None:
+            continue
+        try:
+            key = (str(file_hash), int(chunk_index))
+        except (TypeError, ValueError):
+            continue
+        if key in seen or key not in lookup:
+            continue
+        seen.add(key)
+        record = lookup[key]
+        pinned.append(
+            {
+                "text": record.get("text", ""),
+                "metadata": record.get("metadata", {}),
+                "score": max(0.0, min(1.0, float(metadata.get("score", 0.0) or 0.0))),
+                "semantic_score": float(metadata.get("semantic_score", 0.0) or 0.0),
+                "keyword_score": float(metadata.get("keyword_score", 0.0) or 0.0),
+                "retrieval_method": "previous-citation",
+            }
+        )
+        if len(pinned) >= limit:
+            break
+    return pinned
 
 
 def reset_ask_chat() -> None:
@@ -1216,16 +1289,27 @@ def reset_conversation_chat() -> None:
     st.session_state.conversation_session_id = uuid4().hex
 
 
-def follow_up_filters(query: str, filters: dict | None, source_hashes: list[str]) -> dict:
+def follow_up_filters(
+    query: str,
+    filters: dict | None,
+    source_hashes: list[str],
+    documents: dict[str, dict] | None = None,
+) -> dict:
     effective_filters = dict(filters or {})
-    if effective_filters.get("document_hashes") or not is_follow_up_query(query) or not source_hashes:
+    if effective_filters.get("document_hashes") or not should_use_conversation_context(query, documents):
+        return effective_filters
+    if not source_hashes:
         return effective_filters
     effective_filters["document_hashes"] = source_hashes
     return effective_filters
 
 
-def contextual_follow_up_query(query: str, last_result: dict | None) -> str:
-    if not last_result or not is_follow_up_query(query):
+def contextual_follow_up_query(
+    query: str,
+    last_result: dict | None,
+    documents: dict[str, dict] | None = None,
+) -> str:
+    if not last_result or not should_use_conversation_context(query, documents):
         return query
 
     previous_query = str(last_result.get("query") or "").strip()
@@ -1242,6 +1326,12 @@ def contextual_follow_up_query(query: str, last_result: dict | None) -> str:
         )
         if item
     )
+
+
+def conversation_retrieval_query(query: str, documents: dict[str, dict] | None = None) -> str:
+    if not st.session_state.conversation_messages or not should_use_conversation_context(query, documents):
+        return query
+    return conversation_context_prompt(query)
 
 
 def render_top_bar(selected: str) -> None:
@@ -1505,6 +1595,7 @@ def generate_rag_result(
     response_language_name: str,
     filters: dict | None,
     search_mode: str,
+    pinned_chunks: list[dict] | None = None,
     stream_placeholder=None,
 ) -> dict:
     pipeline = get_pipeline(chat_model, embedding_model)
@@ -1516,6 +1607,12 @@ def generate_rag_result(
         filters=filters,
         search_mode=search_mode,
     )
+    if pinned_chunks:
+        chunks = merge_context_chunks(
+            pinned_chunks,
+            chunks,
+            max_chunks=min(20, max(top_k + 4, top_k + len(pinned_chunks))),
+        )
 
     if not chunks:
         result = pipeline.answer_question(
@@ -1541,6 +1638,26 @@ def generate_rag_result(
     if stream_placeholder is not None:
         stream_placeholder.markdown(answer or "I don't know")
     return pipeline.result_from_answer(answer, chunks)
+
+
+def merge_context_chunks(primary_chunks: list[dict], secondary_chunks: list[dict], *, max_chunks: int) -> list[dict]:
+    merged: list[dict] = []
+    seen: set[str] = set()
+
+    for chunk in primary_chunks + secondary_chunks:
+        metadata = chunk.get("metadata", {})
+        key = str(
+            metadata.get("chunk_id")
+            or metadata.get("vector_position")
+            or f"{metadata.get('file_hash')}:{metadata.get('chunk_index')}"
+        )
+        if key in seen:
+            continue
+        seen.add(key)
+        merged.append(chunk)
+        if len(merged) >= max_chunks:
+            break
+    return merged
 
 
 def persist_uploaded_file(uploaded_file, runtime_settings) -> tuple[Path, str, str]:
@@ -2224,8 +2341,9 @@ def render_ask() -> None:
             query,
             source_filters,
             dominant_source_hashes(previous_ask.get("result")),
+            store.documents,
         )
-        retrieval_query = contextual_follow_up_query(query, previous_ask)
+        retrieval_query = contextual_follow_up_query(query, previous_ask, store.documents)
         st.subheader("Answer")
         stream_placeholder = st.empty()
         with st.status("Retrieving context and streaming answer", expanded=False):
@@ -2316,13 +2434,16 @@ def conversation_context_prompt(new_prompt: str) -> str:
     if not recent_turns:
         return new_prompt
 
-    lines = ["Conversation so far:"]
+    lines = [
+        "Use the conversation so far only to resolve references in the current question.",
+        "Conversation so far:",
+    ]
     for message in recent_turns:
         role = "User" if message["role"] == "user" else "Assistant"
         content = message.get("content", "")
         lines.append(f"{role}: {content}")
     lines.append("")
-    lines.append(f"Current question: {new_prompt}")
+    lines.append(f"Current question to answer: {new_prompt}")
     return "\n".join(lines)
 
 
@@ -2495,8 +2616,12 @@ def render_conversation() -> None:
                 prompt_to_send,
                 source_filters,
                 latest_conversation_source_hashes(),
+                store.documents,
             )
             augmented_prompt = conversation_context_prompt(prompt_to_send)
+            use_follow_up_context = should_use_conversation_context(prompt_to_send, store.documents)
+            retrieval_query = conversation_retrieval_query(prompt_to_send, store.documents)
+            pinned_chunks = latest_conversation_citation_chunks(store) if use_follow_up_context else []
             st.session_state.conversation_messages.append(
                 {"role": "user", "content": prompt_to_send, "language": answer_language}
             )
@@ -2505,6 +2630,7 @@ def render_conversation() -> None:
                 with st.status("Retrieving context and streaming answer", expanded=False):
                     result = generate_rag_result(
                         query=augmented_prompt,
+                        retrieval_query=retrieval_query,
                         chat_model=chat_model,
                         embedding_model=embedding_model,
                         top_k=top_k,
@@ -2512,6 +2638,7 @@ def render_conversation() -> None:
                         response_language_name=answer_language,
                         filters=effective_filters,
                         search_mode=str(search_mode).lower(),
+                        pinned_chunks=pinned_chunks,
                         stream_placeholder=stream_placeholder,
                     )
                 stream_placeholder.markdown(result["answer"])
