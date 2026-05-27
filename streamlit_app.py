@@ -81,6 +81,8 @@ APP_NAME = "AdeptRAG"
 APP_KIND = "Enterprise Retrieval Toolkit"
 APP_TAGLINE = "Governed document intelligence workspace"
 ADEPTRAG_LOGO_ASSET = APP_ROOT / "docs" / "assets" / "adeptrag-logo.png"
+CHAT_USER_AVATAR = "👤"
+CHAT_ASSISTANT_AVATAR = str(ADEPTRAG_LOGO_ASSET) if ADEPTRAG_LOGO_ASSET.exists() else "🤖"
 COMPACT_NAV_LABELS = {
     "Retrieval Audit": "Audit",
     "Documents": "Docs",
@@ -1410,6 +1412,11 @@ def inject_enterprise_styles() -> None:
             font-size: 0.84rem;
         }
 
+        .answer-quality-note {
+            min-width: 0;
+            overflow-wrap: anywhere;
+        }
+
         .confidence-badge {
             display: inline-flex;
             align-items: center;
@@ -1553,6 +1560,7 @@ def inject_enterprise_styles() -> None:
         .st-key-conversation_chat_shell,
         .st-key-ask_chat_shell {
             max-width: 980px;
+            width: 100%;
             margin: 0 auto;
         }
 
@@ -1616,8 +1624,9 @@ def inject_enterprise_styles() -> None:
         .st-key-conversation_chat_shell [data-testid="stChatMessage"],
         .st-key-ask_chat_shell [data-testid="stChatMessage"] {
             border-bottom: 0;
-            padding: 0.7rem 0.25rem;
+            padding: 0.75rem 0.35rem;
             background: transparent;
+            min-width: 0;
         }
 
         .st-key-conversation_chat_shell [data-testid="stChatMessage"]:last-of-type,
@@ -1629,10 +1638,30 @@ def inject_enterprise_styles() -> None:
         .st-key-ask_chat_shell [data-testid="stChatMessage"] [data-testid="stMarkdownContainer"] {
             line-height: 1.55;
             max-width: 820px;
+            min-width: 0;
+            overflow-wrap: anywhere;
         }
 
         [data-testid="stChatMessage"] {
             border-radius: 8px;
+        }
+
+        [data-testid="stChatMessage"] [data-testid^="chatAvatar"],
+        [data-testid="stChatMessage"] [data-testid="stImage"] {
+            flex: 0 0 2.5rem;
+            width: 2.5rem;
+            height: 2.5rem;
+            border-radius: 999px;
+            overflow: hidden;
+        }
+
+        [data-testid="stChatMessage"] [data-testid="stImage"] img {
+            width: 100% !important;
+            height: 100% !important;
+            object-fit: contain;
+            border-radius: 999px;
+            background: rgba(23, 199, 212, 0.08);
+            border: 1px solid rgba(23, 199, 212, 0.22);
         }
 
         [data-testid="stChatMessage"]:has([data-testid="chatAvatarIcon-user"]) {
@@ -1648,6 +1677,28 @@ def inject_enterprise_styles() -> None:
         .st-key-conversation_chat_shell [data-testid="stChatMessage"] [data-testid="stExpander"],
         .st-key-ask_chat_shell [data-testid="stChatMessage"] [data-testid="stExpander"] {
             margin-top: 0.45rem;
+        }
+
+        .feedback-inline-label {
+            color: var(--rag-muted);
+            font-size: 0.82rem;
+            font-weight: 800;
+            margin: 0.55rem 0 0.3rem;
+        }
+
+        .feedback-inline-status {
+            margin-top: 0.25rem;
+        }
+
+        audio {
+            width: 100%;
+            max-width: 100%;
+        }
+
+        [data-testid="stChatInput"] {
+            max-width: min(980px, calc(100vw - 2rem));
+            margin-left: auto;
+            margin-right: auto;
         }
 
         .st-key-ask_new_chat button,
@@ -1874,6 +1925,31 @@ def inject_enterprise_styles() -> None:
                 padding-left: 1rem;
                 padding-right: 1rem;
             }
+            .st-key-top_bar [data-testid="stHorizontalBlock"],
+            .st-key-workspace_nav [data-testid="stHorizontalBlock"] {
+                gap: 0.55rem;
+            }
+            .topbar-brand {
+                gap: 0.65rem;
+            }
+            .topbar-product {
+                font-size: 1rem;
+            }
+            .breadcrumb {
+                max-width: 52vw;
+            }
+            .st-key-top_bar [data-testid="stSelectbox"] {
+                max-width: 16rem;
+            }
+            .st-key-workspace_nav [data-testid="stButtonGroup"] {
+                overflow-x: auto;
+                scrollbar-width: thin;
+                border-radius: 999px;
+            }
+            .st-key-workspace_nav [data-testid="stButtonGroup"] > div {
+                flex: 0 0 auto;
+                min-width: 6.7rem;
+            }
             .metric-row,
             .evidence-summary,
             .audit-guide-grid,
@@ -1886,6 +1962,82 @@ def inject_enterprise_styles() -> None:
         }
 
         @media (max-width: 560px) {
+            .block-container {
+                padding-left: 0.65rem;
+                padding-right: 0.65rem;
+                padding-top: 0.55rem;
+            }
+            .st-key-top_bar,
+            .st-key-workspace_nav,
+            .st-key-app_sidebar,
+            .st-key-ask_settings,
+            .st-key-conversation_settings {
+                border-radius: 12px !important;
+                padding-left: 0.55rem;
+                padding-right: 0.55rem;
+            }
+            .st-key-top_bar [data-testid="stHorizontalBlock"] {
+                flex-wrap: wrap;
+            }
+            .topbar-brand {
+                min-width: 0;
+                width: 100%;
+            }
+            .topbar-logo {
+                width: 2.45rem;
+                height: 2.45rem;
+                border-radius: 10px;
+            }
+            .topbar-logo img {
+                width: 2.15rem;
+                height: 2.15rem;
+            }
+            .breadcrumb {
+                max-width: calc(100vw - 8rem);
+                font-size: 0.76rem;
+            }
+            .role-badge {
+                min-height: 2rem;
+                padding: 0.3rem 0.65rem;
+            }
+            .st-key-top_bar [data-testid="stSelectbox"] {
+                max-width: 100%;
+            }
+            .st-key-top_bar [data-baseweb="select"] > div {
+                min-height: 2.75rem;
+            }
+            .st-key-workspace_nav [data-testid="stButtonGroup"] {
+                border-radius: 16px;
+            }
+            .st-key-workspace_nav [data-testid="stButtonGroup"] > div {
+                min-width: 7.1rem;
+            }
+            .conversation-action-row {
+                align-items: flex-start;
+                flex-direction: column;
+                gap: 0.35rem;
+            }
+            .conversation-empty-state {
+                min-height: 12rem;
+                padding: 1rem;
+            }
+            .st-key-conversation_chat_shell,
+            .st-key-ask_chat_shell {
+                max-width: 100%;
+            }
+            .st-key-conversation_chat_shell [data-testid="stChatMessage"],
+            .st-key-ask_chat_shell [data-testid="stChatMessage"] {
+                padding: 0.65rem 0.2rem;
+            }
+            [data-testid="stChatMessage"] [data-testid^="chatAvatar"],
+            [data-testid="stChatMessage"] [data-testid="stImage"] {
+                flex-basis: 2.1rem;
+                width: 2.1rem;
+                height: 2.1rem;
+            }
+            [data-testid="stChatInput"] {
+                max-width: calc(100vw - 1.3rem);
+            }
             .metric-row,
             .evidence-summary,
             .audit-guide-grid,
@@ -1904,6 +2056,10 @@ def inject_enterprise_styles() -> None:
             .source-card-header {
                 align-items: flex-start;
                 flex-direction: column;
+            }
+            .confidence-badge {
+                white-space: normal;
+                text-align: center;
             }
         }
         </style>
@@ -2023,6 +2179,11 @@ def format_timestamp(value: str | None) -> str:
 
 def escape_html(value: object) -> str:
     return html.escape(str(value or ""), quote=True).replace("\n", "<br>")
+
+
+def chat_message(role: str):
+    avatar = CHAT_USER_AVATAR if role == "user" else CHAT_ASSISTANT_AVATAR
+    return st.chat_message(role, avatar=avatar)
 
 
 def compact_error_detail(exc: BaseException, max_length: int = 280) -> str:
@@ -2479,46 +2640,61 @@ def render_feedback_controls(
     filters: dict | None,
     context: str,
 ) -> None:
-    st.subheader("Feedback")
-    st.caption("Feedback is stored locally for Admin review and export.")
-    comment = st.text_input("Optional note", key=f"{feedback_key}_comment")
-    col_a, col_b = st.columns(2)
-    submitted = st.session_state.feedback_submissions.get(feedback_key)
+    with st.container(key=f"{feedback_key}_feedback_inline"):
+        st.markdown('<div class="feedback-inline-label">Was this answer useful?</div>', unsafe_allow_html=True)
+        comment_col, col_a, col_b = st.columns([1, 0.12, 0.12], gap="small")
+        submitted = st.session_state.feedback_submissions.get(feedback_key)
 
-    if submitted:
-        st.success(f"Feedback recorded: {submitted}")
-        return
+        if submitted:
+            st.markdown(
+                f'<div class="feedback-inline-status">Feedback recorded: {escape_html(submitted)}</div>',
+                unsafe_allow_html=True,
+            )
+            return
 
-    def submit(sentiment: str) -> None:
-        payload = {
-            "feedback_key": feedback_key,
-            "context": context,
-            "sentiment": sentiment,
-            "bad_retrieval": sentiment == "down",
-            "comment": comment.strip(),
-            "query": query,
-            "answer": answer,
-            "role": current_role(),
-            "username": st.session_state.get("username", ""),
-            "model": runtime_settings.openai_chat_model,
-            "embedding_model": runtime_settings.openai_embedding_model,
-            "search_mode": search_mode,
-            "filters": filters or {},
-            "confidence": result.get("confidence", 0.0),
-            "source_count": len(result.get("sources", [])),
-            "source_metadata": result.get("source_metadata", []),
-            "sources": result.get("sources", []),
-        }
-        save_feedback(payload, runtime_settings)
-        st.session_state.feedback_submissions[feedback_key] = "useful" if sentiment == "up" else "needs review"
-        st.rerun()
+        with comment_col:
+            comment = st.text_input(
+                "Optional feedback note",
+                key=f"{feedback_key}_comment",
+                placeholder="Optional note",
+                label_visibility="collapsed",
+            )
 
-    with col_a:
-        if st.button("Good answer", key=f"{feedback_key}_up", width="stretch"):
-            submit("up")
-    with col_b:
-        if st.button("Bad retrieval", key=f"{feedback_key}_down", width="stretch"):
-            submit("down")
+        def submit(sentiment: str) -> None:
+            payload = {
+                "feedback_key": feedback_key,
+                "context": context,
+                "sentiment": sentiment,
+                "bad_retrieval": sentiment == "down",
+                "comment": comment.strip(),
+                "query": query,
+                "answer": answer,
+                "role": current_role(),
+                "username": st.session_state.get("username", ""),
+                "model": runtime_settings.openai_chat_model,
+                "embedding_model": runtime_settings.openai_embedding_model,
+                "search_mode": search_mode,
+                "filters": filters or {},
+                "confidence": result.get("confidence", 0.0),
+                "source_count": len(result.get("sources", [])),
+                "source_metadata": result.get("source_metadata", []),
+                "sources": result.get("sources", []),
+            }
+            save_feedback(payload, runtime_settings)
+            st.session_state.feedback_submissions[feedback_key] = "useful" if sentiment == "up" else "needs review"
+            st.rerun()
+
+        with col_a:
+            if st.button("👍", key=f"{feedback_key}_up", width="stretch", help="Mark this answer useful"):
+                submit("up")
+        with col_b:
+            if st.button(
+                "👎",
+                key=f"{feedback_key}_down",
+                width="stretch",
+                help="Flag the answer or retrieval for review",
+            ):
+                submit("down")
 
 
 FOLLOW_UP_MARKERS = (
@@ -3046,7 +3222,7 @@ def render_answer_quality(result: dict, min_score: float) -> None:
         f"""
         <div class="answer-quality">
             <span class="confidence-badge confidence-{tone}">{escape_html(label)}</span>
-            <span>{escape_html(note)} Sources: {source_count}. Score: {score:.2f}. Threshold: {min_score:.2f}.</span>
+            <span class="answer-quality-note">{escape_html(note)} Sources: {source_count}. Score: {score:.2f}. Threshold: {min_score:.2f}.</span>
         </div>
         """,
         unsafe_allow_html=True,
@@ -4560,9 +4736,9 @@ def render_ask() -> None:
         if st.session_state.last_ask_result:
             last = st.session_state.last_ask_result
             result = last["result"]
-            with st.chat_message("user"):
+            with chat_message("user"):
                 st.write(last["query"])
-            with st.chat_message("assistant"):
+            with chat_message("assistant"):
                 st.write(result["answer"])
                 render_answer_quality(result, last["min_score"])
                 render_spoken_answer(
@@ -4572,17 +4748,16 @@ def render_ask() -> None:
                     language=last["answer_language"],
                     key_prefix="ask_answer",
                 )
-                with st.expander("Feedback", expanded=False):
-                    render_feedback_controls(
-                        feedback_key=f"ask_{last['feedback_key']}",
-                        query=last["query"],
-                        answer=result["answer"],
-                        result=result,
-                        runtime_settings=last["runtime_settings"],
-                        search_mode=last["search_mode"],
-                        filters=last["filters"],
-                        context="ask",
-                    )
+                render_feedback_controls(
+                    feedback_key=f"ask_{last['feedback_key']}",
+                    query=last["query"],
+                    answer=result["answer"],
+                    result=result,
+                    runtime_settings=last["runtime_settings"],
+                    search_mode=last["search_mode"],
+                    filters=last["filters"],
+                    context="ask",
+                )
                 with st.expander("Citations", expanded=False):
                     render_answer_sources(result, last["min_score"], last["runtime_settings"], key_prefix="ask")
 
@@ -4598,9 +4773,9 @@ def render_ask() -> None:
                 store.documents,
             )
             retrieval_query = contextual_follow_up_query(query, previous_ask, store.documents)
-            with st.chat_message("user"):
+            with chat_message("user"):
                 st.write(query)
-            with st.chat_message("assistant"):
+            with chat_message("assistant"):
                 stream_placeholder = st.empty()
                 with st.status("Retrieving context and streaming answer", expanded=False):
                     result = generate_rag_result(
@@ -4853,7 +5028,7 @@ def render_conversation() -> None:
             )
 
         for message_index, message in enumerate(st.session_state.conversation_messages):
-            with st.chat_message(message["role"]):
+            with chat_message(message["role"]):
                 st.write(message.get("content", ""))
                 if (
                     message["role"] == "assistant"
@@ -4874,17 +5049,16 @@ def render_conversation() -> None:
                             "utf-8"
                         )
                     ).hexdigest()
-                    with st.expander("Feedback", expanded=False):
-                        render_feedback_controls(
-                            feedback_key=f"conversation_{feedback_key}",
-                            query=message.get("query", ""),
-                            answer=message.get("content", ""),
-                            result=message["result"],
-                            runtime_settings=runtime_settings,
-                            search_mode=message.get("search_mode", "hybrid"),
-                            filters=message.get("filters", {}),
-                            context="conversation",
-                        )
+                    render_feedback_controls(
+                        feedback_key=f"conversation_{feedback_key}",
+                        query=message.get("query", ""),
+                        answer=message.get("content", ""),
+                        result=message["result"],
+                        runtime_settings=runtime_settings,
+                        search_mode=message.get("search_mode", "hybrid"),
+                        filters=message.get("filters", {}),
+                        context="conversation",
+                    )
                     with st.expander("Citations", expanded=False):
                         render_answer_sources(
                             message["result"],
@@ -4910,7 +5084,7 @@ def render_conversation() -> None:
             st.session_state.conversation_messages.append(
                 {"role": "user", "content": prompt_to_send, "language": answer_language}
             )
-            with st.chat_message("assistant"):
+            with chat_message("assistant"):
                 stream_placeholder = st.empty()
                 with st.status("Retrieving context and streaming answer", expanded=False):
                     result = generate_rag_result(
