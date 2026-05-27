@@ -377,25 +377,61 @@ def inject_enterprise_styles() -> None:
         """
         <style>
         :root {
-            --rag-bg: #0f141b;
-            --rag-panel: #171d26;
-            --rag-panel-2: #1f2631;
-            --rag-border: #303846;
-            --rag-text: #f5f7fa;
-            --rag-muted: #a8b0bc;
-            --rag-blue: #4f8cff;
-            --rag-green: #2fbf71;
+            --rag-bg: #0d1117;
+            --rag-bg-2: #111821;
+            --rag-panel: #171b22;
+            --rag-panel-2: #202631;
+            --rag-panel-soft: rgba(255, 255, 255, 0.035);
+            --rag-border: #303743;
+            --rag-border-strong: #475263;
+            --rag-text: #f6f8fb;
+            --rag-muted: #aab3c2;
+            --rag-muted-2: #7f8a9b;
+            --rag-blue: #5b8cff;
+            --rag-cyan: #39b8c8;
+            --rag-green: #35c27c;
             --rag-amber: #d89b2b;
-            --rag-red: #e05f5f;
+            --rag-red: #e46969;
+            --rag-shadow: 0 18px 42px rgba(0, 0, 0, 0.28);
+            --rag-shadow-soft: 0 10px 26px rgba(0, 0, 0, 0.18);
+            --rag-focus: 0 0 0 2px rgba(91, 140, 255, 0.34);
+        }
+
+        .stApp {
+            background:
+                linear-gradient(180deg, rgba(57, 184, 200, 0.035) 0%, rgba(13, 17, 23, 0) 18rem),
+                linear-gradient(180deg, var(--rag-bg) 0%, #0a0d12 100%);
+            color: var(--rag-text);
         }
 
         .block-container {
-            padding-top: 1.25rem;
+            padding-top: 1rem;
+            padding-bottom: 2.5rem;
             max-width: 1440px;
         }
 
         h1, h2, h3 {
             letter-spacing: 0;
+        }
+
+        h2, h3 {
+            margin-top: 0.35rem;
+        }
+
+        p, li, label, [data-testid="stMarkdownContainer"] {
+            line-height: 1.5;
+        }
+
+        label,
+        [data-testid="stWidgetLabel"] {
+            color: var(--rag-text) !important;
+            font-weight: 700 !important;
+        }
+
+        a {
+            color: var(--rag-cyan);
+            text-decoration-thickness: 1px;
+            text-underline-offset: 0.18rem;
         }
 
         #MainMenu, footer, [data-testid="stToolbar"], [data-testid="stDecoration"] {
@@ -442,15 +478,16 @@ def inject_enterprise_styles() -> None:
 
         [data-testid="stSidebar"] {
             border-right: 1px solid var(--rag-border);
-            background: linear-gradient(180deg, #121821 0%, #0f141b 100%);
+            background: linear-gradient(180deg, #121820 0%, #0d1117 100%);
         }
 
         .sidebar-brand {
             border: 1px solid var(--rag-border);
-            background: rgba(79, 140, 255, 0.08);
+            background: linear-gradient(180deg, rgba(91, 140, 255, 0.12), rgba(57, 184, 200, 0.055));
             border-radius: 8px;
-            padding: 0.9rem;
-            margin: 0.25rem 0 0.85rem;
+            padding: 1rem;
+            margin: 0.25rem 0 0.9rem;
+            box-shadow: var(--rag-shadow-soft);
         }
 
         .sidebar-brand-title {
@@ -475,10 +512,10 @@ def inject_enterprise_styles() -> None:
         .login-card {
             width: min(460px, 100%);
             border: 1px solid var(--rag-border);
-            background: var(--rag-panel);
+            background: linear-gradient(180deg, rgba(32, 38, 49, 0.98), rgba(23, 27, 34, 0.98));
             border-radius: 8px;
-            padding: 1.4rem;
-            box-shadow: 0 18px 60px rgba(0, 0, 0, 0.24);
+            padding: 1.55rem;
+            box-shadow: var(--rag-shadow);
         }
 
         .login-title {
@@ -514,12 +551,13 @@ def inject_enterprise_styles() -> None:
         .st-key-top_bar {
             position: relative;
             z-index: 5;
-            border-color: var(--rag-border) !important;
-            background: rgba(23, 29, 38, 0.94);
-            backdrop-filter: blur(8px);
+            border-color: rgba(71, 82, 99, 0.76) !important;
+            background: rgba(23, 27, 34, 0.92);
+            backdrop-filter: blur(10px);
             border-radius: 8px;
-            padding: 0.55rem 0.75rem;
-            margin-bottom: 0.7rem;
+            padding: 0.6rem 0.75rem;
+            margin-bottom: 0.85rem;
+            box-shadow: var(--rag-shadow-soft);
         }
 
         .st-key-top_bar [data-testid="stHorizontalBlock"] {
@@ -658,11 +696,12 @@ def inject_enterprise_styles() -> None:
         }
 
         .st-key-workspace_nav {
-            margin-bottom: 1.5rem;
-            padding: 0.45rem 0.6rem;
-            border-color: var(--rag-border) !important;
-            background: rgba(23, 29, 38, 0.72);
+            margin-bottom: 1.35rem;
+            padding: 0.48rem 0.6rem;
+            border-color: rgba(71, 82, 99, 0.7) !important;
+            background: rgba(23, 27, 34, 0.78);
             border-radius: 8px;
+            box-shadow: var(--rag-shadow-soft);
         }
 
         .st-key-workspace_nav [data-testid="stHorizontalBlock"] {
@@ -677,6 +716,12 @@ def inject_enterprise_styles() -> None:
 
         .st-key-workspace_nav [data-testid="stSegmentedControl"] {
             width: 100%;
+        }
+
+        [data-testid="stSegmentedControl"] button {
+            border-radius: 6px !important;
+            min-height: 2.35rem;
+            font-weight: 700;
         }
 
         .role-badge {
@@ -707,6 +752,7 @@ def inject_enterprise_styles() -> None:
             min-height: 2.45rem;
             border: 1px solid transparent;
             font-weight: 600;
+            transition: background 140ms ease, border-color 140ms ease, color 140ms ease, transform 140ms ease;
         }
 
         [data-testid="stSidebar"] .stButton > button[kind="secondary"] {
@@ -716,13 +762,14 @@ def inject_enterprise_styles() -> None:
 
         [data-testid="stSidebar"] .stButton > button[kind="secondary"]:hover {
             color: var(--rag-text);
-            background: rgba(255, 255, 255, 0.05);
+            background: rgba(255, 255, 255, 0.055);
             border-color: var(--rag-border);
+            transform: translateX(1px);
         }
 
         [data-testid="stSidebar"] .stButton > button[kind="primary"] {
-            background: rgba(79, 140, 255, 0.18);
-            border-color: rgba(79, 140, 255, 0.45);
+            background: rgba(91, 140, 255, 0.18);
+            border-color: rgba(91, 140, 255, 0.48);
             color: var(--rag-text);
         }
 
@@ -746,14 +793,15 @@ def inject_enterprise_styles() -> None:
             justify-content: space-between;
             gap: 1rem;
             border-bottom: 1px solid var(--rag-border);
-            padding-bottom: 0.75rem;
-            margin-bottom: 1.2rem;
+            padding: 0.25rem 0 0.9rem;
+            margin-bottom: 1.15rem;
         }
 
         .rag-title h1 {
             margin: 0;
-            font-size: 2rem;
+            font-size: 1.85rem;
             line-height: 1.1;
+            letter-spacing: 0;
         }
 
         .rag-subtle {
@@ -773,15 +821,28 @@ def inject_enterprise_styles() -> None:
         .metric-row {
             display: grid;
             grid-template-columns: repeat(4, minmax(0, 1fr));
-            gap: 0.75rem;
-            margin-bottom: 1rem;
+            gap: 0.8rem;
+            margin-bottom: 1.1rem;
         }
 
         .metric-card {
             border: 1px solid var(--rag-border);
-            background: var(--rag-panel);
+            background: linear-gradient(180deg, rgba(32, 38, 49, 0.86), rgba(23, 27, 34, 0.96));
             border-radius: 8px;
-            padding: 0.85rem 1rem;
+            padding: 0.9rem 1rem;
+            box-shadow: var(--rag-shadow-soft);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .metric-card::before {
+            content: "";
+            display: block;
+            width: 2.2rem;
+            height: 2px;
+            border-radius: 999px;
+            background: var(--rag-cyan);
+            margin-bottom: 0.55rem;
         }
 
         .metric-label {
@@ -804,10 +865,11 @@ def inject_enterprise_styles() -> None:
 
         .section-panel {
             border: 1px solid var(--rag-border);
-            background: var(--rag-panel);
+            background: rgba(23, 27, 34, 0.76);
             border-radius: 8px;
             padding: 1rem;
             margin: 0.5rem 0 1rem;
+            box-shadow: var(--rag-shadow-soft);
         }
 
         .source-panel {
@@ -820,9 +882,9 @@ def inject_enterprise_styles() -> None:
 
         .empty-state-panel {
             border: 1px dashed var(--rag-border);
-            background: rgba(23, 29, 38, 0.52);
+            background: rgba(23, 27, 34, 0.58);
             border-radius: 8px;
-            padding: 1.2rem;
+            padding: 1.35rem;
             margin: 0.75rem 0 1rem;
         }
 
@@ -845,7 +907,7 @@ def inject_enterprise_styles() -> None:
             justify-content: space-between;
             gap: 0.7rem;
             border: 1px solid var(--rag-border);
-            background: rgba(23, 29, 38, 0.64);
+            background: rgba(23, 27, 34, 0.76);
             border-radius: 8px;
             padding: 0.65rem 0.75rem;
             margin: 0.75rem 0 0.4rem;
@@ -953,10 +1015,17 @@ def inject_enterprise_styles() -> None:
 
         .agent-tool-card {
             border: 1px solid var(--rag-border);
-            background: rgba(23, 29, 38, 0.58);
+            background: rgba(23, 27, 34, 0.7);
             border-radius: 8px;
             padding: 0.75rem;
             min-height: 5.1rem;
+            transition: border-color 140ms ease, background 140ms ease, transform 140ms ease;
+        }
+
+        .agent-tool-card:hover {
+            border-color: rgba(91, 140, 255, 0.42);
+            background: rgba(32, 38, 49, 0.86);
+            transform: translateY(-1px);
         }
 
         .agent-tool-title {
@@ -1015,7 +1084,7 @@ def inject_enterprise_styles() -> None:
             color: var(--rag-muted);
             border: 1px dashed var(--rag-border);
             border-radius: 8px;
-            background: rgba(23, 29, 38, 0.34);
+            background: rgba(23, 27, 34, 0.44);
             padding: 2rem;
             margin: 1rem 0;
         }
@@ -1028,17 +1097,19 @@ def inject_enterprise_styles() -> None:
         }
 
         .st-key-conversation_settings,
-        .st-key-ask_settings {
+        .st-key-ask_settings,
+        .st-key-agent_settings {
             border-color: var(--rag-border) !important;
-            background: rgba(23, 29, 38, 0.72);
+            background: rgba(23, 27, 34, 0.76);
             border-radius: 8px;
             margin-bottom: 0.9rem;
+            box-shadow: var(--rag-shadow-soft);
         }
 
         .st-key-conversation_chat_shell [data-testid="stChatMessage"],
         .st-key-ask_chat_shell [data-testid="stChatMessage"] {
             border-bottom: 0;
-            padding: 1rem 0.25rem;
+            padding: 0.7rem 0.25rem;
             background: transparent;
         }
 
@@ -1051,6 +1122,20 @@ def inject_enterprise_styles() -> None:
         .st-key-ask_chat_shell [data-testid="stChatMessage"] [data-testid="stMarkdownContainer"] {
             line-height: 1.55;
             max-width: 820px;
+        }
+
+        [data-testid="stChatMessage"] {
+            border-radius: 8px;
+        }
+
+        [data-testid="stChatMessage"]:has([data-testid="chatAvatarIcon-user"]) {
+            background: rgba(91, 140, 255, 0.055);
+            border: 1px solid rgba(91, 140, 255, 0.12);
+        }
+
+        [data-testid="stChatMessage"]:has([data-testid="chatAvatarIcon-assistant"]) {
+            background: rgba(255, 255, 255, 0.026);
+            border: 1px solid rgba(255, 255, 255, 0.055);
         }
 
         .st-key-conversation_chat_shell [data-testid="stChatMessage"] [data-testid="stExpander"],
@@ -1085,7 +1170,7 @@ def inject_enterprise_styles() -> None:
 
         .ingestion-step {
             border: 1px solid var(--rag-border);
-            background: rgba(23, 29, 38, 0.58);
+            background: rgba(23, 27, 34, 0.68);
             border-radius: 8px;
             padding: 0.7rem;
             min-height: 4rem;
@@ -1123,7 +1208,7 @@ def inject_enterprise_styles() -> None:
 
         .audit-guide-card {
             border: 1px solid var(--rag-border);
-            background: rgba(23, 29, 38, 0.58);
+            background: rgba(23, 27, 34, 0.68);
             border-radius: 8px;
             padding: 0.75rem;
         }
@@ -1144,7 +1229,7 @@ def inject_enterprise_styles() -> None:
         .small-pill {
             display: inline-block;
             border: 1px solid var(--rag-border);
-            background: var(--rag-panel-2);
+            background: rgba(32, 38, 49, 0.86);
             color: var(--rag-text);
             border-radius: 999px;
             padding: 0.2rem 0.5rem;
@@ -1156,16 +1241,103 @@ def inject_enterprise_styles() -> None:
         .stButton > button {
             border-radius: 6px;
             min-height: 2.4rem;
+            font-weight: 700;
+            transition: background 140ms ease, border-color 140ms ease, color 140ms ease, transform 140ms ease;
+        }
+
+        .stButton > button:hover {
+            transform: translateY(-1px);
+        }
+
+        .stButton > button:focus-visible,
+        [data-baseweb="select"] > div:focus-within,
+        [data-testid="stTextInput"] input:focus,
+        [data-testid="stTextArea"] textarea:focus,
+        [data-testid="stNumberInput"] input:focus {
+            box-shadow: var(--rag-focus) !important;
+            border-color: rgba(91, 140, 255, 0.72) !important;
+        }
+
+        [data-testid="stTextInput"] input,
+        [data-testid="stTextArea"] textarea,
+        [data-testid="stNumberInput"] input,
+        [data-testid="stDateInput"] input,
+        [data-baseweb="select"] > div {
+            background: rgba(17, 24, 33, 0.86) !important;
+            border-color: var(--rag-border) !important;
+            border-radius: 8px !important;
+        }
+
+        [data-testid="stTextArea"] textarea {
+            min-height: 6rem;
+        }
+
+        [data-testid="stFileUploader"] {
+            border: 1px dashed var(--rag-border);
+            border-radius: 8px;
+            background: rgba(23, 27, 34, 0.54);
+            padding: 0.65rem;
+        }
+
+        [data-testid="stExpander"] {
+            border-color: var(--rag-border) !important;
+            border-radius: 8px !important;
+            background: rgba(23, 27, 34, 0.58);
+        }
+
+        [data-testid="stExpander"] summary {
+            font-weight: 800;
+        }
+
+        [data-testid="stTabs"] button {
+            font-weight: 800;
+            color: var(--rag-muted);
+        }
+
+        [data-testid="stTabs"] button[aria-selected="true"] {
+            color: var(--rag-text);
+        }
+
+        [data-testid="stDataFrame"],
+        [data-testid="stTable"] {
+            border: 1px solid var(--rag-border);
+            border-radius: 8px;
+            overflow: hidden;
+            background: rgba(23, 27, 34, 0.62);
+        }
+
+        [data-testid="stAlert"] {
+            border-radius: 8px;
+            border: 1px solid var(--rag-border);
         }
 
         div[data-testid="stMetric"] {
             border: 1px solid var(--rag-border);
-            background: var(--rag-panel);
+            background: linear-gradient(180deg, rgba(32, 38, 49, 0.82), rgba(23, 27, 34, 0.96));
             border-radius: 8px;
             padding: 0.75rem;
+            box-shadow: var(--rag-shadow-soft);
+        }
+
+        div[data-testid="stMetric"] label {
+            color: var(--rag-muted) !important;
+        }
+
+        code,
+        pre {
+            border-radius: 8px !important;
+            border-color: var(--rag-border) !important;
+        }
+
+        hr {
+            border-color: var(--rag-border);
         }
 
         @media (max-width: 900px) {
+            .block-container {
+                padding-left: 1rem;
+                padding-right: 1rem;
+            }
             .metric-row,
             .evidence-summary,
             .audit-guide-grid,
@@ -1206,15 +1378,28 @@ def inject_enterprise_styles() -> None:
             <style>
             :root {
                 --rag-bg: #f6f8fb;
+                --rag-bg-2: #eef3f8;
                 --rag-panel: #ffffff;
                 --rag-panel-2: #eef2f7;
+                --rag-panel-soft: rgba(23, 32, 44, 0.035);
                 --rag-border: #d7dee9;
+                --rag-border-strong: #aeb9c8;
                 --rag-text: #17202c;
                 --rag-muted: #617086;
+                --rag-muted-2: #7b8798;
                 --rag-blue: #245fd6;
+                --rag-cyan: #127d8d;
                 --rag-green: #158554;
                 --rag-amber: #9a6a09;
                 --rag-red: #b42323;
+                --rag-shadow: 0 18px 42px rgba(19, 34, 56, 0.12);
+                --rag-shadow-soft: 0 10px 24px rgba(19, 34, 56, 0.08);
+                --rag-focus: 0 0 0 2px rgba(36, 95, 214, 0.2);
+            }
+            .stApp {
+                background:
+                    linear-gradient(180deg, rgba(18, 125, 141, 0.055) 0%, rgba(246, 248, 251, 0) 18rem),
+                    linear-gradient(180deg, #f6f8fb 0%, #eef3f8 100%);
             }
             [data-testid="stSidebar"] {
                 background: linear-gradient(180deg, #ffffff 0%, #f4f7fb 100%);
@@ -1233,8 +1418,17 @@ def inject_enterprise_styles() -> None:
             .source-card,
             .ingestion-step,
             .audit-guide-card,
-            .agent-tool-card {
+            .agent-tool-card,
+            [data-testid="stExpander"],
+            [data-testid="stFileUploader"] {
                 background: rgba(255, 255, 255, 0.86);
+            }
+            [data-testid="stTextInput"] input,
+            [data-testid="stTextArea"] textarea,
+            [data-testid="stNumberInput"] input,
+            [data-testid="stDateInput"] input,
+            [data-baseweb="select"] > div {
+                background: #ffffff !important;
             }
             </style>
             """,
