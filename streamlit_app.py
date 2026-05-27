@@ -335,7 +335,109 @@ def render_login_page() -> None:
         }
         .block-container {
             max-width: 1180px;
-            padding-top: 4rem;
+            padding-top: 0;
+            padding-bottom: 0;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+        }
+        .st-key-login_panel {
+            width: min(520px, calc(100vw - 2rem));
+            margin: 0 auto;
+            border: 1px solid var(--rag-border);
+            border-radius: 8px;
+            background: linear-gradient(180deg, rgba(32, 38, 49, 0.98), rgba(14, 18, 25, 0.98));
+            box-shadow: 0 28px 80px rgba(0, 0, 0, 0.36);
+            overflow: hidden;
+        }
+        .st-key-login_panel .login-card {
+            width: 100%;
+            border: 0;
+            border-radius: 0;
+            box-shadow: none;
+            background:
+                linear-gradient(135deg, rgba(91, 140, 255, 0.15), rgba(57, 184, 200, 0.055)),
+                rgba(32, 38, 49, 0.92);
+            padding: 1.55rem 1.35rem 1.25rem;
+            border-bottom: 1px solid var(--rag-border);
+        }
+        .login-eyebrow {
+            color: var(--rag-cyan);
+            font-size: 0.72rem;
+            font-weight: 800;
+            letter-spacing: 0.08rem;
+            text-transform: uppercase;
+            margin-bottom: 0.55rem;
+        }
+        .login-product-row {
+            display: flex;
+            align-items: center;
+            gap: 0.55rem;
+            flex-wrap: wrap;
+            margin-bottom: 0.35rem;
+        }
+        .st-key-login_panel .login-title {
+            font-size: 1.85rem;
+            line-height: 1.05;
+            margin: 0;
+            white-space: nowrap;
+        }
+        .login-badge {
+            border: 1px solid rgba(91, 140, 255, 0.45);
+            background: rgba(91, 140, 255, 0.14);
+            color: var(--rag-text);
+            border-radius: 999px;
+            padding: 0.22rem 0.6rem;
+            font-size: 0.78rem;
+            font-weight: 800;
+        }
+        .st-key-login_panel .login-subtitle {
+            margin: 0;
+            color: var(--rag-muted);
+            font-size: 0.95rem;
+        }
+        .st-key-login_panel [data-testid="stForm"] {
+            border: 0;
+            background: transparent;
+            padding: 1.25rem 1.35rem 0.4rem;
+        }
+        .st-key-login_panel [data-testid="InputInstructions"] {
+            display: none !important;
+        }
+        .st-key-login_panel [data-testid="stTextInput"] {
+            margin-bottom: 0.8rem;
+        }
+        .st-key-login_panel [data-testid="stTextInput"] input {
+            min-height: 3rem;
+            font-size: 1rem;
+            border-radius: 8px !important;
+            padding-right: 3.2rem !important;
+        }
+        .st-key-login_panel .stButton > button {
+            min-height: 3rem;
+            font-size: 1rem;
+            margin-top: 0.35rem;
+        }
+        .login-demo-note {
+            color: var(--rag-muted);
+            font-size: 0.88rem;
+            padding: 0.15rem 1.35rem 1.35rem;
+        }
+        .login-demo-note strong {
+            color: var(--rag-text);
+            font-weight: 800;
+        }
+        @media (max-width: 560px) {
+            .block-container {
+                align-items: flex-start;
+                padding-top: 2rem;
+            }
+            .st-key-login_panel .login-title {
+                white-space: normal;
+                font-size: 1.65rem;
+            }
         }
         </style>
         """,
@@ -344,22 +446,30 @@ def render_login_page() -> None:
     _, center, _ = st.columns([1, 1.15, 1])
 
     with center:
-        st.markdown(
-            """
-            <div class="login-card">
-                <div class="login-title">Enterprise RAG Console</div>
-                <div class="login-subtitle">Sign in to access the knowledge workspace.</div>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
+        with st.container(key="login_panel"):
+            st.markdown(
+                """
+                <div class="login-card">
+                    <div class="login-eyebrow">Knowledge workspace</div>
+                    <div class="login-product-row">
+                        <div class="login-title">Enterprise RAG</div>
+                        <div class="login-badge">Console</div>
+                    </div>
+                    <div class="login-subtitle">Sign in to search documents, inspect citations, and run demos.</div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
 
-        with st.form("login_form", clear_on_submit=False):
-            username = st.text_input("Username", placeholder="admin or user")
-            password = st.text_input("Password", type="password", placeholder="admin or user")
-            submitted = st.form_submit_button("Sign in", type="primary", use_container_width=True)
+            with st.form("login_form", clear_on_submit=False):
+                username = st.text_input("Username", placeholder="admin or user")
+                password = st.text_input("Password", type="password", placeholder="admin or user")
+                submitted = st.form_submit_button("Sign in", type="primary", use_container_width=True)
 
-        st.caption("Demo credentials: admin/admin or user/user")
+            st.markdown(
+                '<div class="login-demo-note">Demo credentials: <strong>admin/admin</strong> or <strong>user/user</strong></div>',
+                unsafe_allow_html=True,
+            )
 
         if submitted:
             role = authenticate(username, password)
