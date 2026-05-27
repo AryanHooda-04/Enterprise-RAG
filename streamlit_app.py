@@ -2844,13 +2844,6 @@ def render_app_sidebar(selected: str) -> str:
             """,
             unsafe_allow_html=True,
         )
-        if settings.auth_enabled:
-            st.caption(f"Signed in as {st.session_state.username or current_role().lower()} - {current_role()}")
-            if st.button("Sign out", key="app_sidebar_sign_out", width="stretch"):
-                sign_out_current_user()
-                st.rerun()
-            st.divider()
-
         for label, group_items in NAV_GROUPS:
             available_group_items = [item for item in group_items if item in items]
             if not available_group_items:
@@ -2881,6 +2874,14 @@ def render_app_sidebar(selected: str) -> str:
             get_pipeline.clear()
             get_vector_store.clear()
             st.rerun()
+
+        if settings.auth_enabled:
+            st.divider()
+            st.markdown('<div class="sidebar-section-label">Account</div>', unsafe_allow_html=True)
+            st.caption(f"Signed in as {st.session_state.username or current_role().lower()} - {current_role()}")
+            if st.button("Sign out", key="app_sidebar_sign_out", width="stretch"):
+                sign_out_current_user()
+                st.rerun()
 
     return st.session_state.nav_selection
 
