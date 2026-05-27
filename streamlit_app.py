@@ -112,7 +112,7 @@ DEFAULT_EVALUATION_CASES = (
 DEMO_LIMIT_DEFAULTS = {
     "demo_limits_enabled": True,
     "demo_daily_call_limit": 80,
-    "demo_daily_token_limit": 200_000,
+    "demo_daily_token_limit": 10_000_000,
     "demo_session_call_limit": 12,
     "demo_max_upload_files": 3,
     "demo_max_upload_size_mb": 10,

@@ -324,7 +324,7 @@ All values are environment-driven. Common settings:
 | `VOICE_LANGUAGE` | `Auto` | Default voice language mode |
 | `RAG_DEMO_LIMITS_ENABLED` | `true` | Enable public Streamlit demo guardrails |
 | `RAG_DEMO_DAILY_CALL_LIMIT` | `80` | Deployment-wide OpenAI call limit per UTC day |
-| `RAG_DEMO_DAILY_TOKEN_LIMIT` | `200000` | Deployment-wide token budget per UTC day |
+| `RAG_DEMO_DAILY_TOKEN_LIMIT` | `10000000` | Deployment-wide token budget per UTC day |
 | `RAG_DEMO_SESSION_CALL_LIMIT` | `12` | Per-browser-session demo action limit |
 | `RAG_DEMO_MAX_UPLOAD_FILES` | `3` | Demo upload files allowed per batch |
 | `RAG_DEMO_MAX_UPLOAD_SIZE_MB` | `10` | Demo per-file upload size |

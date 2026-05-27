@@ -215,7 +215,7 @@ class Settings:
     default_voice_language: str = os.getenv("VOICE_LANGUAGE", "Auto")
     demo_limits_enabled: bool = _env_bool("RAG_DEMO_LIMITS_ENABLED", True)
     demo_daily_call_limit: int = _env_int("RAG_DEMO_DAILY_CALL_LIMIT", 80)
-    demo_daily_token_limit: int = _env_int("RAG_DEMO_DAILY_TOKEN_LIMIT", 200_000)
+    demo_daily_token_limit: int = _env_int("RAG_DEMO_DAILY_TOKEN_LIMIT", 10_000_000)
     demo_session_call_limit: int = _env_int("RAG_DEMO_SESSION_CALL_LIMIT", 12)
     demo_max_upload_files: int = _env_int("RAG_DEMO_MAX_UPLOAD_FILES", 3)
     demo_max_upload_size_mb: int = _env_int("RAG_DEMO_MAX_UPLOAD_SIZE_MB", 10)
