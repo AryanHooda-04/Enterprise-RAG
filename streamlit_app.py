@@ -415,6 +415,10 @@ def render_login_page() -> None:
             border-radius: 8px !important;
             padding-right: 3.2rem !important;
         }
+        .st-key-login_panel [data-testid="stTextInput"] input[type="password"]::-ms-reveal,
+        .st-key-login_panel [data-testid="stTextInput"] input[type="password"]::-ms-clear {
+            display: none;
+        }
         .st-key-login_panel .stButton > button {
             min-height: 3rem;
             font-size: 1rem;
