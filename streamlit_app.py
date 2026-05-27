@@ -61,6 +61,7 @@ KNOWLEDGE_NAV_ITEMS = (
 ADMIN_NAV_ITEMS = (
     "Ingestion",
     "Index Management",
+    "Evaluation",
     "Administration",
 )
 NAV_GROUPS = (
@@ -70,15 +71,43 @@ NAV_GROUPS = (
 )
 NAV_ITEMS = PRIMARY_NAV_ITEMS + KNOWLEDGE_NAV_ITEMS + ADMIN_NAV_ITEMS
 
-ADMIN_ONLY_NAV = {"Ingestion", "Index Management", "Administration"}
+ADMIN_ONLY_NAV = {"Ingestion", "Index Management", "Evaluation", "Administration"}
 ROLES = ("Admin", "User")
 NAVIGATION_MODES = ("Top row", "Sidebar", "Both")
 COMPACT_NAV_LABELS = {
     "Retrieval Audit": "Audit",
     "Documents": "Docs",
     "Index Management": "Index",
+    "Evaluation": "Eval",
     "Administration": "Admin",
 }
+
+DEFAULT_EVALUATION_CASES = (
+    {
+        "Question": "Who was Heidi?",
+        "Expected answer": "Heidi was a young Swiss child who lived in the Alps.",
+        "Expected unknown": False,
+        "Required citation contains": "Heidi",
+    },
+    {
+        "Question": "Whom did Heidi live with?",
+        "Expected answer": "Heidi lived with her grandfather, Alm-Uncle.",
+        "Expected unknown": False,
+        "Required citation contains": "Heidi",
+    },
+    {
+        "Question": "Who is Black Beauty?",
+        "Expected answer": "Black Beauty is a horse.",
+        "Expected unknown": False,
+        "Required citation contains": "Black Beauty",
+    },
+    {
+        "Question": "What is the quarterly revenue forecast?",
+        "Expected answer": "I don't know",
+        "Expected unknown": True,
+        "Required citation contains": "",
+    },
+)
 
 
 @st.cache_resource
@@ -121,6 +150,8 @@ def init_session_state() -> None:
     st.session_state.setdefault("last_ask_result", None)
     st.session_state.setdefault("last_agent_result", None)
     st.session_state.setdefault("agent_history", [])
+    st.session_state.setdefault("evaluation_cases", load_evaluation_cases(settings))
+    st.session_state.setdefault("last_evaluation_results", [])
     st.session_state.setdefault("feedback_submissions", {})
     st.session_state.setdefault("ingestion_queue", [])
     st.session_state.setdefault("ask_session_id", uuid4().hex)
@@ -1231,6 +1262,16 @@ def escape_html(value: object) -> str:
     return html.escape(str(value or ""), quote=True).replace("\n", "<br>")
 
 
+def compact_error_detail(exc: BaseException, max_length: int = 280) -> str:
+    message = getattr(exc, "message", None) or str(exc) or exc.__class__.__name__
+    message = re.sub(r"<[^>]+>", " ", str(message))
+    message = html.unescape(message)
+    message = re.sub(r"\s+", " ", message).strip()
+    if len(message) <= max_length:
+        return message
+    return message[: max_length - 3] + "..."
+
+
 def option_index(options: tuple[str, ...], value: str) -> int:
     try:
         return options.index(value)
@@ -1403,11 +1444,23 @@ def render_spoken_answer(
     cache = st.session_state.speech_audio_cache
     if cache_key not in cache:
         with st.spinner("Generating voice answer"):
-            cache[cache_key] = synthesize_speech(
-                answer,
-                language=language,
-                active_settings=runtime_settings,
-            )
+            try:
+                cache[cache_key] = synthesize_speech(
+                    answer,
+                    language=language,
+                    active_settings=runtime_settings,
+                )
+            except RAGApplicationError as exc:
+                st.warning("Voice playback unavailable on this network. Text answer is shown above.")
+                with st.expander("Voice playback detail", expanded=False):
+                    st.caption(compact_error_detail(exc))
+                return
+            except Exception as exc:
+                logger.exception("Voice playback failed: %s", exc)
+                st.warning("Voice playback unavailable right now. Text answer is shown above.")
+                with st.expander("Voice playback detail", expanded=False):
+                    st.caption(compact_error_detail(exc))
+                return
 
     st.audio(cache[cache_key], format="audio/mp3")
 
@@ -2503,6 +2556,183 @@ def merge_context_chunks(primary_chunks: list[dict], secondary_chunks: list[dict
     return merged
 
 
+def default_evaluation_cases() -> list[dict]:
+    return [dict(case) for case in DEFAULT_EVALUATION_CASES]
+
+
+def evaluation_cases_path(active_settings=settings) -> Path:
+    return active_settings.data_dir / "evaluation_cases.json"
+
+
+def normalize_evaluation_cases(rows: list[dict]) -> list[dict]:
+    cases: list[dict] = []
+    for row in rows:
+        question = str(row.get("Question", "") or "").strip()
+        if not question:
+            continue
+        cases.append(
+            {
+                "Question": question,
+                "Expected answer": str(row.get("Expected answer", "") or "").strip(),
+                "Expected unknown": bool(row.get("Expected unknown", False)),
+                "Required citation contains": str(row.get("Required citation contains", "") or "").strip(),
+            }
+        )
+    return cases
+
+
+def load_evaluation_cases(active_settings=settings) -> list[dict]:
+    path = evaluation_cases_path(active_settings)
+    if not path.exists():
+        return default_evaluation_cases()
+    try:
+        raw_cases = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return default_evaluation_cases()
+    if not isinstance(raw_cases, list):
+        return default_evaluation_cases()
+    cases = normalize_evaluation_cases([case for case in raw_cases if isinstance(case, dict)])
+    return cases or default_evaluation_cases()
+
+
+def save_evaluation_cases(cases: list[dict], active_settings=settings) -> None:
+    active_settings.ensure_directories()
+    evaluation_cases_path(active_settings).write_text(
+        json.dumps(cases, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+
+
+EVALUATION_STOP_WORDS = {
+    "the",
+    "and",
+    "that",
+    "this",
+    "with",
+    "from",
+    "into",
+    "were",
+    "was",
+    "for",
+    "who",
+    "what",
+    "where",
+    "when",
+    "how",
+    "did",
+    "does",
+    "are",
+    "not",
+    "know",
+}
+
+
+def evaluation_tokens(text: str) -> set[str]:
+    return {
+        token
+        for token in re.findall(r"[a-z0-9]+", text.lower())
+        if len(token) > 2 and token not in EVALUATION_STOP_WORDS
+    }
+
+
+def is_unknown_answer(answer: str) -> bool:
+    normalized = re.sub(r"\s+", " ", answer.lower()).strip()
+    return any(
+        phrase in normalized
+        for phrase in (
+            "i don't know",
+            "i do not know",
+            "not enough information",
+            "not provided in the context",
+            "cannot answer from the context",
+            "answer is not in the context",
+        )
+    )
+
+
+def answer_quality_score(answer: str, expected: str, expected_unknown: bool) -> float:
+    if expected_unknown:
+        return 1.0 if is_unknown_answer(answer) else 0.0
+
+    if is_unknown_answer(answer):
+        return 0.0
+
+    expected_terms = evaluation_tokens(expected)
+    if not expected_terms:
+        return 0.0
+    answer_terms = evaluation_tokens(answer)
+    return round(len(expected_terms & answer_terms) / len(expected_terms), 3)
+
+
+def citation_correctness(result: dict, required_text: str) -> bool | None:
+    required = required_text.strip().lower()
+    if not required:
+        return None
+    for metadata in result.get("source_metadata", []):
+        file_name = str(metadata.get("file_name", "")).lower()
+        source_path = str(metadata.get("source_path", "")).lower()
+        if required in file_name or required in source_path:
+            return True
+    return False
+
+
+def evaluate_result_row(case: dict, result: dict, *, search_mode: str) -> dict:
+    answer = str(result.get("answer", "") or "")
+    expected_unknown = bool(case.get("Expected unknown"))
+    citation_match = citation_correctness(result, str(case.get("Required citation contains", "") or ""))
+    citation_score = None if citation_match is None else (1.0 if citation_match else 0.0)
+    idk_correct = is_unknown_answer(answer) if expected_unknown else not is_unknown_answer(answer)
+    quality = answer_quality_score(answer, str(case.get("Expected answer", "") or ""), expected_unknown)
+    overall_scores = [quality, 1.0 if idk_correct else 0.0]
+    if citation_score is not None:
+        overall_scores.append(citation_score)
+    sources = result.get("source_metadata", [])
+    top_source = sources[0].get("file_name", "") if sources else ""
+    overall = sum(overall_scores) / len(overall_scores)
+    return {
+        "Question": case["Question"],
+        "Expected": case.get("Expected answer", ""),
+        "Answer": answer,
+        "Retrieval score": round(float(result.get("confidence", 0.0) or 0.0), 3),
+        "Answer quality": quality,
+        "Citation correctness": "N/A" if citation_match is None else ("Pass" if citation_match else "Fail"),
+        "I don't know accuracy": "Pass" if idk_correct else "Fail",
+        "Overall": round(overall, 3),
+        "Sources": len(result.get("sources", [])),
+        "Top source": top_source,
+        "Search mode": search_mode,
+        "Status": "Pass" if overall >= 0.7 else "Review",
+        "Error": "",
+    }
+
+
+def evaluation_error_row(case: dict, exc: BaseException, *, search_mode: str) -> dict:
+    return {
+        "Question": case.get("Question", ""),
+        "Expected": case.get("Expected answer", ""),
+        "Answer": "",
+        "Retrieval score": 0.0,
+        "Answer quality": 0.0,
+        "Citation correctness": "N/A",
+        "I don't know accuracy": "Fail",
+        "Overall": 0.0,
+        "Sources": 0,
+        "Top source": "",
+        "Search mode": search_mode,
+        "Status": "Error",
+        "Error": compact_error_detail(exc),
+    }
+
+
+def top_source_documents(result: dict, limit: int = 3) -> list[str]:
+    counts: Counter[str] = Counter()
+    for metadata in result.get("source_metadata", []):
+        file_name = metadata.get("file_name")
+        if file_name:
+            counts[str(file_name)] += 1
+    return [name for name, _ in counts.most_common(limit)]
+
+
 def persist_uploaded_file(uploaded_file, runtime_settings) -> tuple[Path, str, str]:
     original_name = safe_filename(uploaded_file.name)
     extension = Path(original_name).suffix.lower()
@@ -3414,6 +3644,7 @@ def render_ask() -> None:
                     "search_mode": str(search_mode).lower(),
                     "confidence": result["confidence"],
                     "sources": len(result["sources"]),
+                    "top_documents": "; ".join(top_source_documents(result)),
                 }
             )
             st.rerun()
@@ -4228,6 +4459,410 @@ def render_index_management() -> None:
         st.rerun()
 
 
+def render_evaluation() -> None:
+    render_header("Evaluation", "Run a small answer-quality test set against the current RAG pipeline.")
+    if not require_admin_ui():
+        return
+
+    embedding_model = model_selectbox(
+        "Knowledge index",
+        EMBEDDING_MODEL_OPTIONS,
+        active_embedding_model(),
+        "evaluation_embedding_model",
+        disabled=not can_change_models(),
+    )
+    if not can_change_models():
+        embedding_model = active_embedding_model()
+    chat_model = model_selectbox(
+        "Answer model",
+        CHAT_MODEL_OPTIONS,
+        active_chat_model(),
+        "evaluation_chat_model",
+        disabled=not can_change_models(),
+    )
+    if not can_change_models():
+        chat_model = active_chat_model()
+
+    runtime_settings = active_settings(chat_model=chat_model, embedding_model=embedding_model)
+    store = get_vector_store(embedding_model)
+    if store.is_empty:
+        render_index_empty_state("Evaluation", "evaluation_empty_index")
+        return
+
+    st.caption(
+        "Metrics are deterministic heuristics for demos: answer overlap with the expected answer, "
+        "retrieval confidence, citation filename match, and unknown-answer behavior."
+    )
+
+    with st.container(border=True):
+        st.subheader("Test set")
+        if st.button("Reload starter cases", use_container_width=False):
+            st.session_state.evaluation_cases = default_evaluation_cases()
+            st.session_state.last_evaluation_results = []
+            save_evaluation_cases(st.session_state.evaluation_cases, runtime_settings)
+            st.rerun()
+
+        cases_df = pd.DataFrame(st.session_state.evaluation_cases)
+        edited_cases = st.data_editor(
+            cases_df,
+            num_rows="dynamic",
+            use_container_width=True,
+            hide_index=True,
+            column_config={
+                "Question": st.column_config.TextColumn("Question", required=True),
+                "Expected answer": st.column_config.TextColumn("Expected answer"),
+                "Expected unknown": st.column_config.CheckboxColumn("Expected unknown"),
+                "Required citation contains": st.column_config.TextColumn(
+                    "Required citation contains",
+                    help="Optional filename/path text that should appear in at least one citation.",
+                ),
+            },
+            key="evaluation_cases_editor",
+        )
+
+    control_col_a, control_col_b, control_col_c = st.columns([1, 1, 1], gap="large")
+    with control_col_a:
+        search_mode = st.segmented_control(
+            "Search mode",
+            ["Hybrid", "Semantic", "Keyword"],
+            default="Hybrid",
+            key="evaluation_search_mode",
+        )
+    with control_col_b:
+        top_k = st.slider("Top K", 1, 20, runtime_settings.top_k, key="evaluation_top_k")
+    with control_col_c:
+        min_score = st.slider("Minimum score", 0.0, 1.0, 0.0, step=0.01, key="evaluation_min_score")
+
+    cases = normalize_evaluation_cases(edited_cases.to_dict("records"))
+    run_col, save_col, clear_col = st.columns([1, 0.35, 0.35], gap="small")
+    run_clicked = run_col.button(
+        "Run evaluation",
+        type="primary",
+        disabled=not cases,
+        use_container_width=True,
+    )
+    if save_col.button("Save cases", disabled=not cases, use_container_width=True):
+        st.session_state.evaluation_cases = cases
+        save_evaluation_cases(cases, runtime_settings)
+        st.success("Evaluation test set saved.")
+    if clear_col.button("Clear results", use_container_width=True):
+        st.session_state.last_evaluation_results = []
+        st.rerun()
+
+    if run_clicked:
+        st.session_state.evaluation_cases = cases
+        save_evaluation_cases(cases, runtime_settings)
+        rows: list[dict] = []
+        progress = st.progress(0)
+        status = st.empty()
+        for index, case in enumerate(cases, start=1):
+            status.info(f"Evaluating {index} of {len(cases)}: {case['Question']}")
+            try:
+                result = generate_rag_result(
+                    query=case["Question"],
+                    chat_model=chat_model,
+                    embedding_model=embedding_model,
+                    top_k=top_k,
+                    min_score=min_score,
+                    response_language_name="English",
+                    filters=None,
+                    search_mode=str(search_mode).lower(),
+                )
+                rows.append(evaluate_result_row(case, result, search_mode=str(search_mode).lower()))
+            except Exception as exc:
+                logger.exception("Evaluation case failed: %s", exc)
+                rows.append(evaluation_error_row(case, exc, search_mode=str(search_mode).lower()))
+            progress.progress(index / len(cases))
+        status.success(f"Evaluation completed for {len(cases)} case(s).")
+        st.session_state.last_evaluation_results = rows
+
+    results = st.session_state.last_evaluation_results
+    if not results:
+        st.markdown(
+            """
+            <div class="conversation-empty-state">
+                <div>
+                    <div class="conversation-empty-title">No evaluation run yet</div>
+                    <div class="rag-subtle">Run the starter test set or edit it for your presentation documents.</div>
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+        return
+
+    results_df = pd.DataFrame(results)
+    non_error_df = results_df[results_df["Status"] != "Error"]
+    citation_df = non_error_df[non_error_df["Citation correctness"] != "N/A"]
+    metric_col_a, metric_col_b, metric_col_c, metric_col_d = st.columns(4)
+    avg_retrieval = non_error_df["Retrieval score"].mean() if not non_error_df.empty else 0
+    avg_quality = non_error_df["Answer quality"].mean() if not non_error_df.empty else 0
+    citation_accuracy = (citation_df["Citation correctness"] == "Pass").mean() if not citation_df.empty else 0
+    idk_accuracy = (
+        (non_error_df["I don't know accuracy"] == "Pass").mean()
+        if not non_error_df.empty
+        else 0
+    )
+    metric_col_a.metric("Avg Retrieval Score", f"{avg_retrieval:.2f}")
+    metric_col_b.metric("Avg Answer Quality", f"{avg_quality:.2f}")
+    metric_col_c.metric("Citation Correctness", f"{citation_accuracy:.0%}" if not citation_df.empty else "N/A")
+    metric_col_d.metric("I Don't Know Accuracy", f"{idk_accuracy:.0%}")
+
+    st.dataframe(
+        results_df[
+            [
+                "Status",
+                "Question",
+                "Retrieval score",
+                "Answer quality",
+                "Citation correctness",
+                "I don't know accuracy",
+                "Overall",
+                "Sources",
+                "Top source",
+                "Error",
+            ]
+        ],
+        hide_index=True,
+        use_container_width=True,
+    )
+
+    chart_df = non_error_df.melt(
+        id_vars=["Question"],
+        value_vars=["Retrieval score", "Answer quality", "Overall"],
+        var_name="Metric",
+        value_name="Score",
+    )
+    if not chart_df.empty:
+        fig = px.bar(
+            chart_df,
+            x="Question",
+            y="Score",
+            color="Metric",
+            barmode="group",
+            range_y=[0, 1],
+            title="Evaluation Scores by Question",
+        )
+        fig.update_layout(margin=dict(l=10, r=10, t=46, b=10), height=360)
+        st.plotly_chart(fig, use_container_width=True)
+
+    with st.expander("Answers and expected outputs"):
+        for row in results:
+            st.markdown(f"**{row['Question']}**")
+            st.caption(f"Expected: {row['Expected']}")
+            if row.get("Error"):
+                st.error(row["Error"])
+            else:
+                st.write(row["Answer"])
+
+    st.download_button(
+        "Export evaluation CSV",
+        results_df.to_csv(index=False),
+        "rag_evaluation.csv",
+        "text/csv",
+        use_container_width=True,
+    )
+    st.download_button(
+        "Export evaluation JSON",
+        json.dumps(results, ensure_ascii=False, indent=2),
+        "rag_evaluation.json",
+        "application/json",
+        use_container_width=True,
+    )
+
+
+def date_bucket(value: str | None) -> str:
+    if not value:
+        return "Unknown"
+    try:
+        return datetime.fromisoformat(value.replace("Z", "+00:00")).strftime("%Y-%m-%d")
+    except ValueError:
+        return "Unknown"
+
+
+def usage_trend_dataframe(records: list[dict]) -> pd.DataFrame:
+    rows = [
+        {
+            "Date": date_bucket(record.get("timestamp")),
+            "Operation": record.get("operation") or "unknown",
+            "Calls": 1,
+            "Tokens": int(record.get("total_tokens") or 0),
+        }
+        for record in records
+    ]
+    if not rows:
+        return pd.DataFrame(columns=["Date", "Operation", "Calls", "Tokens"])
+    return pd.DataFrame(rows).groupby(["Date", "Operation"], as_index=False).sum()
+
+
+def feedback_trend_dataframe(records: list[dict]) -> pd.DataFrame:
+    rows = [
+        {
+            "Date": date_bucket(record.get("submitted_at")),
+            "Sentiment": record.get("sentiment") or "unknown",
+            "Count": 1,
+        }
+        for record in records
+    ]
+    if not rows:
+        return pd.DataFrame(columns=["Date", "Sentiment", "Count"])
+    return pd.DataFrame(rows).groupby(["Date", "Sentiment"], as_index=False).sum()
+
+
+def top_queried_document_counts(feedback_records: list[dict]) -> Counter[str]:
+    counts: Counter[str] = Counter()
+    for item in st.session_state.query_history:
+        documents = str(item.get("top_documents", "") or "")
+        for document in [part.strip() for part in documents.split(";") if part.strip()]:
+            counts[document] += 1
+    for message in st.session_state.conversation_messages:
+        for metadata in message.get("citations", []) or []:
+            file_name = metadata.get("file_name") if isinstance(metadata, dict) else None
+            if file_name:
+                counts[str(file_name)] += 1
+    last_agent_result = st.session_state.get("last_agent_result") or {}
+    for metadata in last_agent_result.get("result", {}).get("source_metadata", []):
+        file_name = metadata.get("file_name")
+        if file_name:
+            counts[str(file_name)] += 1
+    for record in feedback_records:
+        for metadata in record.get("source_metadata", []) or []:
+            if isinstance(metadata, dict) and metadata.get("file_name"):
+                counts[str(metadata["file_name"])] += 1
+    return counts
+
+
+def estimate_usage_cost(
+    usage_records: list[dict],
+    *,
+    prompt_rate_per_million: float,
+    completion_rate_per_million: float,
+    input_unit_rate_per_million: float,
+    output_unit_rate_per_million: float,
+) -> float:
+    prompt_tokens = sum(int(record.get("prompt_tokens") or 0) for record in usage_records)
+    completion_tokens = sum(int(record.get("completion_tokens") or 0) for record in usage_records)
+    input_units = sum(int(record.get("input_count") or 0) for record in usage_records)
+    output_units = sum(int(record.get("output_count") or 0) for record in usage_records)
+    return (
+        (prompt_tokens / 1_000_000) * prompt_rate_per_million
+        + (completion_tokens / 1_000_000) * completion_rate_per_million
+        + (input_units / 1_000_000) * input_unit_rate_per_million
+        + (output_units / 1_000_000) * output_unit_rate_per_million
+    )
+
+
+def render_admin_analytics_dashboard(runtime_settings) -> None:
+    st.subheader("Admin Analytics Dashboard")
+    store = get_vector_store(runtime_settings.openai_embedding_model)
+    documents = store.list_documents()
+    usage_records = load_usage(runtime_settings)
+    feedback_records = load_feedback(runtime_settings)
+    queue_status = Counter(item.get("status", "unknown") for item in st.session_state.ingestion_queue)
+    failed_uploads = int(queue_status.get("failed", 0))
+    if st.session_state.last_ingestion:
+        failed_uploads = max(failed_uploads, int(st.session_state.last_ingestion.get("failed", 0) or 0))
+
+    with st.expander("Cost estimator rates", expanded=False):
+        st.caption("Use your approved pricing sheet here. Defaults are zero to avoid hardcoded stale vendor pricing.")
+        rate_col_a, rate_col_b, rate_col_c, rate_col_d = st.columns(4)
+        prompt_rate = rate_col_a.number_input("Prompt tokens $/1M", min_value=0.0, value=0.0, step=0.01)
+        completion_rate = rate_col_b.number_input("Completion tokens $/1M", min_value=0.0, value=0.0, step=0.01)
+        input_unit_rate = rate_col_c.number_input("Input units $/1M", min_value=0.0, value=0.0, step=0.01)
+        output_unit_rate = rate_col_d.number_input("Output units $/1M", min_value=0.0, value=0.0, step=0.01)
+    estimated_cost = estimate_usage_cost(
+        usage_records,
+        prompt_rate_per_million=prompt_rate,
+        completion_rate_per_million=completion_rate,
+        input_unit_rate_per_million=input_unit_rate,
+        output_unit_rate_per_million=output_unit_rate,
+    )
+
+    metric_col_a, metric_col_b, metric_col_c, metric_col_d, metric_col_e = st.columns(5)
+    metric_col_a.metric("Documents", len(documents))
+    metric_col_b.metric("Chunks", len(store.chunks))
+    metric_col_c.metric("Vectors", store.total_vectors)
+    metric_col_d.metric("Failed Uploads", failed_uploads)
+    metric_col_e.metric("Estimated Cost", f"${estimated_cost:.4f}")
+
+    analytics_tab_a, analytics_tab_b, analytics_tab_c = st.tabs(["Index", "Usage", "Feedback"])
+    with analytics_tab_a:
+        if documents:
+            index_rows = [
+                {
+                    "Document": document.get("file_name", "Unknown"),
+                    "File type": Path(document.get("file_name", "")).suffix.lower().lstrip(".") or "unknown",
+                    "Chunks": int(document.get("chunk_count") or 0),
+                    "Visual chunks": int(document.get("visual_chunk_count") or 0),
+                    "Uploaded": format_timestamp(document.get("uploaded_at")),
+                }
+                for document in documents
+            ]
+            index_df = pd.DataFrame(index_rows)
+            file_type_df = index_df.groupby("File type", as_index=False)["Document"].count()
+            fig = px.bar(file_type_df, x="File type", y="Document", title="Documents by File Type")
+            fig.update_layout(margin=dict(l=10, r=10, t=46, b=10), height=320)
+            st.plotly_chart(fig, use_container_width=True)
+            st.dataframe(index_df, hide_index=True, use_container_width=True)
+        else:
+            st.caption("No indexed documents yet.")
+
+        if st.session_state.ingestion_queue:
+            queue_df = pd.DataFrame(queue_rows())
+            st.dataframe(queue_df, hide_index=True, use_container_width=True)
+        else:
+            st.caption("No active ingestion queue.")
+
+    with analytics_tab_b:
+        if usage_records:
+            operation_df = pd.DataFrame(
+                [
+                    {
+                        "Operation": operation,
+                        "Calls": count,
+                        "Tokens": sum(
+                            int(record.get("total_tokens") or 0)
+                            for record in usage_records
+                            if (record.get("operation") or "unknown") == operation
+                        ),
+                    }
+                    for operation, count in Counter(record.get("operation") or "unknown" for record in usage_records).items()
+                ]
+            )
+            fig = px.bar(operation_df, x="Operation", y="Calls", title="Calls by Operation")
+            fig.update_layout(margin=dict(l=10, r=10, t=46, b=10), height=320)
+            st.plotly_chart(fig, use_container_width=True)
+
+            trend_df = usage_trend_dataframe(usage_records)
+            if not trend_df.empty:
+                fig = px.line(trend_df, x="Date", y="Tokens", color="Operation", markers=True, title="Token Usage Trend")
+                fig.update_layout(margin=dict(l=10, r=10, t=46, b=10), height=320)
+                st.plotly_chart(fig, use_container_width=True)
+        else:
+            st.caption("No usage events recorded yet.")
+
+    with analytics_tab_c:
+        document_counts = top_queried_document_counts(feedback_records)
+        if document_counts:
+            top_docs_df = pd.DataFrame(
+                [{"Document": document, "Mentions": count} for document, count in document_counts.most_common(10)]
+            )
+            fig = px.bar(top_docs_df, x="Mentions", y="Document", orientation="h", title="Top Queried/Cited Documents")
+            fig.update_layout(margin=dict(l=10, r=10, t=46, b=10), height=360)
+            st.plotly_chart(fig, use_container_width=True)
+            st.dataframe(top_docs_df, hide_index=True, use_container_width=True)
+        else:
+            st.caption("No cited document activity yet. Ask questions or collect feedback to populate this chart.")
+
+        trend_df = feedback_trend_dataframe(feedback_records)
+        if not trend_df.empty:
+            fig = px.bar(trend_df, x="Date", y="Count", color="Sentiment", title="Feedback Trend")
+            fig.update_layout(margin=dict(l=10, r=10, t=46, b=10), height=320)
+            st.plotly_chart(fig, use_container_width=True)
+        else:
+            st.caption("No feedback submitted yet.")
+
+
 def render_administration() -> None:
     render_header("Administration", "Runtime configuration, connectivity, and local storage state.")
     if not require_admin_ui():
@@ -4267,7 +4902,9 @@ def render_administration() -> None:
         except RAGApplicationError as exc:
             st.error(exc.message)
 
-    st.subheader("Usage & Cost Dashboard")
+    render_admin_analytics_dashboard(runtime_settings)
+
+    st.subheader("Usage Event Export")
     usage_records = load_usage(runtime_settings)
     usage_summary = summarize_usage(usage_records)
     usage_col_a, usage_col_b, usage_col_c, usage_col_d = st.columns(4)
@@ -4382,6 +5019,8 @@ def render_selected_page(selected: str) -> None:
         render_documents()
     elif selected == "Index Management":
         render_index_management()
+    elif selected == "Evaluation":
+        render_evaluation()
     elif selected == "Administration":
         render_administration()
 

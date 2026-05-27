@@ -43,6 +43,7 @@ flowchart LR
     P --> Q[Build grounded prompt]
     Q --> R[Generate answer or report]
     R --> S[Show citations, evidence chart, feedback, and exports]
+    S --> T[Evaluate quality and admin analytics]
 ```
 
 The local knowledge index is stored under `data/index/<embedding-model>/`.
@@ -64,6 +65,14 @@ Agent mode still uses the same grounded retrieval layer, source metadata, and
 citations as Ask and Conversation. It adds text or voice goals, spoken answers,
 an agent plan, evidence table, Plotly evidence chart, Markdown export, and PDF
 export for resume-ready agentic RAG demonstrations.
+
+## Evaluation Mode
+
+The `Evaluation` workspace lets admins maintain a small test set of questions,
+expected answers, expected `I don't know` behavior, and optional required
+citation filename text. Each run reports retrieval score, answer-quality overlap,
+citation correctness, unknown-answer accuracy, overall pass/review status, charts,
+and CSV/JSON export. Test cases are stored locally in `data/evaluation_cases.json`.
 
 ## Project Structure
 
@@ -140,7 +149,8 @@ The enterprise UI is organized into:
 - `Retrieval Audit`: semantic-search inspection before answer generation.
 - `Documents`: filterable inventory with CSV export.
 - `Index Management`: delete, re-index, rebuild, reset, and migrate documents across embedding indexes.
-- `Administration`: runtime settings, storage paths, upload limits, usage/cost tracking, feedback export, and connection diagnostics.
+- `Evaluation`: admin test-set runner for retrieval score, answer quality, citation correctness, and `I don't know` accuracy.
+- `Administration`: runtime settings, storage paths, upload limits, admin analytics, usage/cost tracking, feedback export, and connection diagnostics.
 
 The app opens to a login screen before the dashboard. Built-in local users are
 `admin/admin` and `user/user`. `Admin` can ingest documents, change models,
@@ -150,7 +160,9 @@ conversation mode, audit retrieval, and view documents.
 Voice input and output are available to both roles in Ask, Conversation, and
 Agent mode. Pick `Auto`, `English`, or `Hindi` from the Voice controls for demo
 use. `Auto` detects the spoken question or agent goal language, and answers are
-prompted to remain in that user language.
+prompted to remain in that user language. If speech output is blocked by a
+corporate proxy or certificate policy, the text answer remains visible and the UI
+shows a compact warning instead of failing the whole answer.
 
 Ask and Conversation support `Hybrid`, `Semantic`, and `Keyword` retrieval
 modes. Hybrid search combines FAISS semantic matches with a local BM25-style
@@ -162,8 +174,9 @@ Answer feedback is stored locally in `data/feedback.jsonl`. Admins can review
 recent feedback and export JSONL or CSV from Administration.
 
 Usage events are stored locally in `data/usage.jsonl`. Admins can review calls,
-tokens, audio/image units, and document-linked usage from Administration, then
-export JSONL or CSV for approved cost reporting.
+tokens, audio/image units, document-linked usage, failed upload status, top
+queried/cited documents, feedback trends, and configurable cost estimates from
+Administration, then export JSONL or CSV for approved cost reporting.
 
 The Upload tab supports:
 
