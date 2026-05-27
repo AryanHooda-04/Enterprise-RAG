@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import hashlib
 import html
 import json
@@ -8,6 +9,7 @@ import re
 from io import BytesIO
 from collections import Counter
 from datetime import datetime, timezone
+from functools import lru_cache
 from pathlib import Path
 from threading import Lock
 from uuid import uuid4
@@ -74,6 +76,8 @@ NAV_ITEMS = PRIMARY_NAV_ITEMS + KNOWLEDGE_NAV_ITEMS + ADMIN_NAV_ITEMS
 ADMIN_ONLY_NAV = {"Ingestion", "Index Management", "Evaluation", "Administration"}
 ROLES = ("Admin", "User")
 NAVIGATION_MODES = ("Top row", "Sidebar", "Both")
+APP_ROOT = Path(__file__).resolve().parent
+RAG_VISUAL_ASSET = APP_ROOT / "docs" / "assets" / "rag-knowledge-texture.webp"
 COMPACT_NAV_LABELS = {
     "Retrieval Audit": "Audit",
     "Documents": "Docs",
@@ -121,6 +125,16 @@ DEMO_LIMIT_DEFAULTS = {
     "demo_max_visual_pages": 5,
     "demo_max_docx_images": 5,
 }
+
+
+@lru_cache(maxsize=4)
+def image_data_uri(path_value: str) -> str:
+    path = Path(path_value)
+    if not path.exists():
+        return ""
+    mime_type = "image/webp" if path.suffix.lower() == ".webp" else "image/png"
+    encoded = base64.b64encode(path.read_bytes()).decode("ascii")
+    return f"data:{mime_type};base64,{encoded}"
 
 
 @st.cache_resource
@@ -487,8 +501,13 @@ def render_login_page() -> None:
 
 
 def inject_enterprise_styles() -> None:
-    st.markdown(
-        """
+    visual_uri = image_data_uri(str(RAG_VISUAL_ASSET))
+    visual_css = (
+        f':root {{ --rag-visual-image: url("{visual_uri}"); }}\n'
+        if visual_uri
+        else ":root { --rag-visual-image: none; }\n"
+    )
+    base_style = """
         <style>
         :root {
             --rag-bg: #0d1117;
@@ -505,6 +524,8 @@ def inject_enterprise_styles() -> None:
             --rag-cyan: #39b8c8;
             --rag-green: #35c27c;
             --rag-amber: #d89b2b;
+            --rag-gold: #f2bf5e;
+            --rag-coral: #ff7a7a;
             --rag-red: #e46969;
             --rag-shadow: 0 18px 42px rgba(0, 0, 0, 0.28);
             --rag-shadow-soft: 0 10px 26px rgba(0, 0, 0, 0.18);
@@ -512,10 +533,62 @@ def inject_enterprise_styles() -> None:
         }
 
         .stApp {
+            position: relative;
             background:
-                linear-gradient(180deg, rgba(57, 184, 200, 0.035) 0%, rgba(13, 17, 23, 0) 18rem),
+                linear-gradient(135deg, rgba(53, 194, 124, 0.06) 0%, rgba(255, 122, 122, 0.035) 42%, rgba(91, 140, 255, 0.055) 100%),
+                linear-gradient(180deg, rgba(57, 184, 200, 0.055) 0%, rgba(13, 17, 23, 0) 18rem),
                 linear-gradient(180deg, var(--rag-bg) 0%, #0a0d12 100%);
             color: var(--rag-text);
+        }
+
+        .stApp::before {
+            content: "";
+            position: fixed;
+            inset: 0;
+            pointer-events: none;
+            z-index: 0;
+            background-image: var(--rag-visual-image);
+            background-repeat: no-repeat;
+            background-position: right -9rem top 4rem;
+            background-size: min(68rem, 76vw) auto;
+            opacity: 0.16;
+            filter: saturate(1.1);
+            animation: ragAmbientDrift 22s ease-in-out infinite alternate;
+        }
+
+        .stApp > header,
+        .stApp [data-testid="stAppViewContainer"] {
+            position: relative;
+            z-index: 1;
+        }
+
+        @keyframes ragAmbientDrift {
+            from {
+                transform: translate3d(0, 0, 0) scale(1);
+            }
+            to {
+                transform: translate3d(-1.4rem, 0.8rem, 0) scale(1.025);
+            }
+        }
+
+        @keyframes ragFadeLift {
+            from {
+                opacity: 0;
+                transform: translateY(8px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        @keyframes ragPulse {
+            0%, 100% {
+                box-shadow: 0 0 0 0 rgba(53, 194, 124, 0.22);
+            }
+            50% {
+                box-shadow: 0 0 0 0.35rem rgba(53, 194, 124, 0);
+            }
         }
 
         .block-container {
@@ -597,11 +670,14 @@ def inject_enterprise_styles() -> None:
 
         .sidebar-brand {
             border: 1px solid var(--rag-border);
-            background: linear-gradient(180deg, rgba(91, 140, 255, 0.12), rgba(57, 184, 200, 0.055));
+            background:
+                linear-gradient(135deg, rgba(15, 23, 34, 0.9), rgba(15, 23, 34, 0.72)),
+                var(--rag-visual-image) center / cover no-repeat;
             border-radius: 8px;
             padding: 1rem;
             margin: 0.25rem 0 0.9rem;
             box-shadow: var(--rag-shadow-soft);
+            overflow: hidden;
         }
 
         .sidebar-brand-title {
@@ -667,12 +743,14 @@ def inject_enterprise_styles() -> None:
             z-index: 5;
             border-color: rgba(71, 82, 99, 0.76) !important;
             background:
+                linear-gradient(135deg, rgba(53, 194, 124, 0.12), rgba(255, 122, 122, 0.06) 42%, rgba(91, 140, 255, 0.1)),
                 linear-gradient(180deg, rgba(28, 34, 44, 0.95), rgba(18, 23, 31, 0.95));
             backdrop-filter: blur(12px);
             border-radius: 8px;
             padding: 0.5rem 0.65rem;
             margin-bottom: 0.85rem;
             box-shadow: var(--rag-shadow-soft);
+            animation: ragFadeLift 360ms ease both;
         }
 
         .st-key-top_bar [data-testid="stHorizontalBlock"] {
@@ -803,9 +881,12 @@ def inject_enterprise_styles() -> None:
             margin-bottom: 1.35rem;
             padding: 0.48rem 0.6rem;
             border-color: rgba(71, 82, 99, 0.7) !important;
-            background: rgba(23, 27, 34, 0.78);
+            background:
+                linear-gradient(135deg, rgba(91, 140, 255, 0.08), rgba(53, 194, 124, 0.045), rgba(255, 122, 122, 0.035)),
+                rgba(23, 27, 34, 0.82);
             border-radius: 8px;
             box-shadow: var(--rag-shadow-soft);
+            animation: ragFadeLift 380ms ease both;
         }
 
         .st-key-workspace_nav [data-testid="stHorizontalBlock"] {
@@ -832,7 +913,7 @@ def inject_enterprise_styles() -> None:
             display: inline-flex;
             align-items: center;
             border: 1px solid var(--rag-border);
-            background: var(--rag-panel-2);
+            background: linear-gradient(135deg, rgba(91, 140, 255, 0.18), rgba(53, 194, 124, 0.12));
             color: var(--rag-text);
             border-radius: 999px;
             padding: 0.25rem 0.65rem;
@@ -897,14 +978,35 @@ def inject_enterprise_styles() -> None:
             align-items: center;
             justify-content: space-between;
             gap: 1rem;
-            border-bottom: 1px solid var(--rag-border);
-            padding: 0.25rem 0 0.9rem;
-            margin-bottom: 1.15rem;
+            position: relative;
+            overflow: hidden;
+            border: 1px solid rgba(71, 82, 99, 0.82);
+            border-radius: 8px;
+            padding: 1.35rem 1.45rem;
+            margin-bottom: 1.2rem;
+            background:
+                linear-gradient(90deg, rgba(13, 17, 23, 0.96) 0%, rgba(13, 17, 23, 0.82) 48%, rgba(13, 17, 23, 0.62) 100%),
+                var(--rag-visual-image) right center / min(43rem, 48vw) auto no-repeat;
+            box-shadow: var(--rag-shadow-soft);
+            animation: ragFadeLift 420ms ease both;
+        }
+
+        .rag-title::before {
+            content: "";
+            position: absolute;
+            inset: 0 0 auto;
+            height: 3px;
+            background: linear-gradient(90deg, var(--rag-cyan), var(--rag-green), var(--rag-gold), var(--rag-coral));
+        }
+
+        .rag-title > div {
+            position: relative;
+            z-index: 1;
         }
 
         .rag-title h1 {
             margin: 0;
-            font-size: 1.85rem;
+            font-size: 2rem;
             line-height: 1.1;
             letter-spacing: 0;
         }
@@ -912,6 +1014,20 @@ def inject_enterprise_styles() -> None:
         .rag-subtle {
             color: var(--rag-muted);
             font-size: 0.9rem;
+            max-width: 44rem;
+        }
+
+        .rag-title-status {
+            display: inline-flex;
+            align-items: center;
+            white-space: nowrap;
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            background: rgba(17, 24, 33, 0.72);
+            color: var(--rag-text);
+            border-radius: 999px;
+            padding: 0.42rem 0.7rem;
+            box-shadow: 0 12px 28px rgba(0, 0, 0, 0.16);
+            backdrop-filter: blur(10px);
         }
 
         .status-dot {
@@ -921,6 +1037,7 @@ def inject_enterprise_styles() -> None:
             border-radius: 999px;
             background: var(--rag-green);
             margin-right: 0.4rem;
+            animation: ragPulse 2.4s ease-in-out infinite;
         }
 
         .metric-row {
@@ -932,12 +1049,21 @@ def inject_enterprise_styles() -> None:
 
         .metric-card {
             border: 1px solid var(--rag-border);
-            background: linear-gradient(180deg, rgba(32, 38, 49, 0.86), rgba(23, 27, 34, 0.96));
+            background:
+                linear-gradient(135deg, rgba(91, 140, 255, 0.12), rgba(53, 194, 124, 0.055) 48%, rgba(242, 191, 94, 0.05)),
+                linear-gradient(180deg, rgba(32, 38, 49, 0.88), rgba(23, 27, 34, 0.96));
             border-radius: 8px;
             padding: 0.9rem 1rem;
             box-shadow: var(--rag-shadow-soft);
             position: relative;
             overflow: hidden;
+            transition: transform 160ms ease, border-color 160ms ease, box-shadow 160ms ease;
+        }
+
+        .metric-card:hover {
+            transform: translateY(-2px);
+            border-color: rgba(57, 184, 200, 0.48);
+            box-shadow: var(--rag-shadow);
         }
 
         .metric-card::before {
@@ -970,7 +1096,9 @@ def inject_enterprise_styles() -> None:
 
         .section-panel {
             border: 1px solid var(--rag-border);
-            background: rgba(23, 27, 34, 0.76);
+            background:
+                linear-gradient(135deg, rgba(57, 184, 200, 0.06), rgba(255, 122, 122, 0.035)),
+                rgba(23, 27, 34, 0.78);
             border-radius: 8px;
             padding: 1rem;
             margin: 0.5rem 0 1rem;
@@ -987,10 +1115,13 @@ def inject_enterprise_styles() -> None:
 
         .empty-state-panel {
             border: 1px dashed var(--rag-border);
-            background: rgba(23, 27, 34, 0.58);
+            background:
+                linear-gradient(90deg, rgba(13, 17, 23, 0.88), rgba(13, 17, 23, 0.72)),
+                var(--rag-visual-image) right center / min(38rem, 58vw) auto no-repeat;
             border-radius: 8px;
             padding: 1.35rem;
             margin: 0.75rem 0 1rem;
+            box-shadow: var(--rag-shadow-soft);
         }
 
         .empty-state-title {
@@ -1012,7 +1143,7 @@ def inject_enterprise_styles() -> None:
             justify-content: space-between;
             gap: 0.7rem;
             border: 1px solid var(--rag-border);
-            background: rgba(23, 27, 34, 0.76);
+            background: linear-gradient(135deg, rgba(53, 194, 124, 0.08), rgba(91, 140, 255, 0.06)), rgba(23, 27, 34, 0.78);
             border-radius: 8px;
             padding: 0.65rem 0.75rem;
             margin: 0.75rem 0 0.4rem;
@@ -1078,10 +1209,16 @@ def inject_enterprise_styles() -> None:
 
         .source-card {
             border: 1px solid var(--rag-border);
-            background: rgba(23, 29, 38, 0.58);
+            background: linear-gradient(135deg, rgba(91, 140, 255, 0.08), rgba(242, 191, 94, 0.045)), rgba(23, 29, 38, 0.66);
             border-radius: 8px;
             padding: 0.85rem;
             margin: 0.65rem 0 0.35rem;
+            transition: transform 160ms ease, border-color 160ms ease, background 160ms ease;
+        }
+
+        .source-card:hover {
+            transform: translateY(-1px);
+            border-color: rgba(242, 191, 94, 0.38);
         }
 
         .source-card-header {
@@ -1189,9 +1326,12 @@ def inject_enterprise_styles() -> None:
             color: var(--rag-muted);
             border: 1px dashed var(--rag-border);
             border-radius: 8px;
-            background: rgba(23, 27, 34, 0.44);
+            background:
+                linear-gradient(180deg, rgba(13, 17, 23, 0.86), rgba(13, 17, 23, 0.7)),
+                var(--rag-visual-image) center / cover no-repeat;
             padding: 2rem;
             margin: 1rem 0;
+            box-shadow: var(--rag-shadow-soft);
         }
 
         .conversation-empty-title {
@@ -1205,10 +1345,13 @@ def inject_enterprise_styles() -> None:
         .st-key-ask_settings,
         .st-key-agent_settings {
             border-color: var(--rag-border) !important;
-            background: rgba(23, 27, 34, 0.76);
+            background:
+                linear-gradient(135deg, rgba(57, 184, 200, 0.07), rgba(242, 191, 94, 0.035)),
+                rgba(23, 27, 34, 0.8);
             border-radius: 8px;
             margin-bottom: 0.9rem;
             box-shadow: var(--rag-shadow-soft);
+            animation: ragFadeLift 460ms ease both;
         }
 
         .st-key-conversation_chat_shell [data-testid="stChatMessage"],
@@ -1347,11 +1490,22 @@ def inject_enterprise_styles() -> None:
             border-radius: 6px;
             min-height: 2.4rem;
             font-weight: 700;
-            transition: background 140ms ease, border-color 140ms ease, color 140ms ease, transform 140ms ease;
+            transition: background 160ms ease, border-color 160ms ease, color 160ms ease, transform 160ms ease, box-shadow 160ms ease;
         }
 
         .stButton > button:hover {
             transform: translateY(-1px);
+        }
+
+        .stButton > button[kind="primary"] {
+            background: linear-gradient(135deg, #4f86ff, #32bca7 58%, #f0b85b) !important;
+            border-color: transparent !important;
+            color: #ffffff !important;
+            box-shadow: 0 12px 28px rgba(50, 188, 167, 0.22);
+        }
+
+        .stButton > button[kind="primary"]:hover {
+            box-shadow: 0 16px 34px rgba(80, 139, 255, 0.26);
         }
 
         .stButton > button:focus-visible,
@@ -1438,6 +1592,24 @@ def inject_enterprise_styles() -> None:
             border-color: var(--rag-border);
         }
 
+        @media (prefers-reduced-motion: reduce) {
+            .stApp::before,
+            .st-key-top_bar,
+            .st-key-workspace_nav,
+            .rag-title,
+            .status-dot,
+            .st-key-conversation_settings,
+            .st-key-ask_settings,
+            .st-key-agent_settings {
+                animation: none !important;
+            }
+            .stButton > button,
+            .metric-card,
+            .source-card {
+                transition: none !important;
+            }
+        }
+
         @media (max-width: 900px) {
             .block-container {
                 padding-left: 1rem;
@@ -1465,6 +1637,9 @@ def inject_enterprise_styles() -> None:
             .rag-title {
                 align-items: flex-start;
                 flex-direction: column;
+                background-position: right -10rem center;
+                background-size: 34rem auto;
+                padding: 1.1rem;
             }
             .answer-quality,
             .source-card-header {
@@ -1473,9 +1648,8 @@ def inject_enterprise_styles() -> None:
             }
         }
         </style>
-        """,
-        unsafe_allow_html=True,
-    )
+    """
+    st.markdown(base_style.replace("<style>", f"<style>\n{visual_css}", 1), unsafe_allow_html=True)
 
     if st.session_state.get("theme_mode") == "Light":
         st.markdown(
@@ -1496,6 +1670,8 @@ def inject_enterprise_styles() -> None:
                 --rag-cyan: #127d8d;
                 --rag-green: #158554;
                 --rag-amber: #9a6a09;
+                --rag-gold: #b2740a;
+                --rag-coral: #c7445b;
                 --rag-red: #b42323;
                 --rag-shadow: 0 18px 42px rgba(19, 34, 56, 0.12);
                 --rag-shadow-soft: 0 10px 24px rgba(19, 34, 56, 0.08);
@@ -1503,8 +1679,13 @@ def inject_enterprise_styles() -> None:
             }
             .stApp {
                 background:
+                    linear-gradient(135deg, rgba(21, 133, 84, 0.055), rgba(199, 68, 91, 0.04), rgba(36, 95, 214, 0.05)),
                     linear-gradient(180deg, rgba(18, 125, 141, 0.055) 0%, rgba(246, 248, 251, 0) 18rem),
                     linear-gradient(180deg, #f6f8fb 0%, #eef3f8 100%);
+            }
+            .stApp::before {
+                opacity: 0.1;
+                filter: saturate(0.92);
             }
             [data-testid="stSidebar"] {
                 background: linear-gradient(180deg, #ffffff 0%, #f4f7fb 100%);
@@ -1515,7 +1696,15 @@ def inject_enterprise_styles() -> None:
             .st-key-top_bar,
             .st-key-workspace_nav,
             .st-key-app_sidebar {
-                background: rgba(255, 255, 255, 0.94);
+                background: linear-gradient(135deg, rgba(18, 125, 141, 0.06), rgba(178, 116, 10, 0.045)), rgba(255, 255, 255, 0.94);
+            }
+            .rag-title {
+                background:
+                    linear-gradient(90deg, rgba(255, 255, 255, 0.96) 0%, rgba(255, 255, 255, 0.88) 52%, rgba(255, 255, 255, 0.72) 100%),
+                    var(--rag-visual-image) right center / min(43rem, 48vw) auto no-repeat;
+            }
+            .rag-title-status {
+                background: rgba(255, 255, 255, 0.72);
             }
             .empty-state-panel,
             .answer-quality,
@@ -1549,7 +1738,7 @@ def render_header(title: str, subtitle: str) -> None:
                 <h1>{escape_html(title)}</h1>
                 <div class="rag-subtle">{escape_html(subtitle)}</div>
             </div>
-            <div class="rag-subtle"><span class="status-dot"></span>Local index online</div>
+            <div class="rag-subtle rag-title-status"><span class="status-dot"></span>Local index online</div>
         </div>
         """,
         unsafe_allow_html=True,
