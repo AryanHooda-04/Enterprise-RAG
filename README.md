@@ -1,9 +1,11 @@
-# Local RAG Application
+# AdeptRAG
 
-A modular Retrieval-Augmented Generation application in Python. It accepts PDF,
-TXT, DOCX, and image uploads, extracts text and visual descriptions, chunks by
-token count, creates OpenAI embeddings, stores vectors locally in FAISS, and
-answers questions using retrieved context.
+<img src="docs/assets/adeptrag-logo.png" alt="AdeptRAG logo" width="260">
+
+AdeptRAG is an enterprise-style Retrieval-Augmented Generation toolkit in
+Python. It accepts PDF, TXT, DOCX, and image uploads, extracts text and visual
+descriptions, chunks by token count, creates OpenAI embeddings, stores vectors
+locally in FAISS, and answers questions using retrieved context.
 
 ## Live App
 
@@ -15,7 +17,7 @@ https://enterprise-rag-vbhjbfxe6xrewsvnudhuoi.streamlit.app/
 
 ## Walkthrough
 
-![Enterprise RAG walkthrough](docs/assets/enterprise-rag-walkthrough.gif)
+![AdeptRAG walkthrough](docs/assets/enterprise-rag-walkthrough.gif)
 
 ## Architecture
 

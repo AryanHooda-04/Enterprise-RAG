@@ -77,7 +77,11 @@ ADMIN_ONLY_NAV = {"Ingestion", "Index Management", "Evaluation", "Administration
 ROLES = ("Admin", "User")
 NAVIGATION_MODES = ("Top row", "Sidebar", "Both")
 APP_ROOT = Path(__file__).resolve().parent
+APP_NAME = "AdeptRAG"
+APP_KIND = "Enterprise Retrieval Toolkit"
+APP_TAGLINE = "Governed document intelligence workspace"
 RAG_VISUAL_ASSET = APP_ROOT / "docs" / "assets" / "rag-knowledge-texture.webp"
+ADEPTRAG_LOGO_ASSET = APP_ROOT / "docs" / "assets" / "adeptrag-logo.png"
 COMPACT_NAV_LABELS = {
     "Retrieval Audit": "Audit",
     "Documents": "Docs",
@@ -384,7 +388,8 @@ def render_login_page() -> None:
             border-radius: 0;
             box-shadow: none;
             background:
-                linear-gradient(135deg, rgba(91, 140, 255, 0.15), rgba(57, 184, 200, 0.055)),
+                radial-gradient(circle at top left, rgba(23, 199, 212, 0.22), transparent 38%),
+                linear-gradient(135deg, rgba(29, 117, 255, 0.2), rgba(124, 58, 237, 0.1)),
                 rgba(32, 38, 49, 0.92);
             padding: 1.55rem 1.35rem 1.25rem;
             border-bottom: 1px solid var(--rag-border);
@@ -400,9 +405,27 @@ def render_login_page() -> None:
         .login-product-row {
             display: flex;
             align-items: center;
-            gap: 0.55rem;
+            gap: 0.75rem;
             flex-wrap: wrap;
             margin-bottom: 0.35rem;
+        }
+        .login-logo {
+            width: 4.4rem;
+            height: 4.4rem;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            border: 1px solid rgba(23, 199, 212, 0.28);
+            border-radius: 16px;
+            background: rgba(255, 255, 255, 0.08);
+            box-shadow: 0 18px 40px rgba(10, 26, 64, 0.26);
+            flex: 0 0 auto;
+        }
+        .login-logo img {
+            width: 4rem;
+            height: 4rem;
+            object-fit: contain;
+            display: block;
         }
         .st-key-login_panel .login-title {
             font-size: 1.85rem;
@@ -411,8 +434,8 @@ def render_login_page() -> None:
             white-space: nowrap;
         }
         .login-badge {
-            border: 1px solid rgba(91, 140, 255, 0.45);
-            background: rgba(91, 140, 255, 0.14);
+            border: 1px solid rgba(23, 199, 212, 0.45);
+            background: linear-gradient(135deg, rgba(29, 117, 255, 0.22), rgba(124, 58, 237, 0.18));
             color: var(--rag-text);
             border-radius: 999px;
             padding: 0.22rem 0.6rem;
@@ -468,24 +491,36 @@ def render_login_page() -> None:
                 white-space: normal;
                 font-size: 1.65rem;
             }
+            .login-logo {
+                width: 3.5rem;
+                height: 3.5rem;
+            }
+            .login-logo img {
+                width: 3.1rem;
+                height: 3.1rem;
+            }
         }
         </style>
         """,
         unsafe_allow_html=True,
     )
+    logo_uri = image_data_uri(str(ADEPTRAG_LOGO_ASSET))
     _, center, _ = st.columns([1, 1.15, 1])
 
     with center:
         with st.container(key="login_panel"):
             st.markdown(
-                """
+                f"""
                 <div class="login-card">
-                    <div class="login-eyebrow">Knowledge workspace</div>
+                    <div class="login-eyebrow">{escape_html(APP_KIND)}</div>
                     <div class="login-product-row">
-                        <div class="login-title">Enterprise RAG</div>
-                        <div class="login-badge">Console</div>
+                        <div class="login-logo"><img src="{logo_uri}" alt="{escape_html(APP_NAME)} logo"></div>
+                        <div>
+                            <div class="login-title">{escape_html(APP_NAME)}</div>
+                            <div class="login-badge">Toolkit Console</div>
+                        </div>
                     </div>
-                    <div class="login-subtitle">Sign in to search documents, inspect citations, and run demos.</div>
+                    <div class="login-subtitle">Sign in to search documents, inspect citations, and run governed AI demos.</div>
                 </div>
                 """,
                 unsafe_allow_html=True,
@@ -514,41 +549,44 @@ def render_login_page() -> None:
 
 def inject_enterprise_styles() -> None:
     visual_uri = image_data_uri(str(RAG_VISUAL_ASSET))
+    logo_uri = image_data_uri(str(ADEPTRAG_LOGO_ASSET))
     visual_css = (
-        f':root {{ --rag-visual-image: url("{visual_uri}"); }}\n'
-        if visual_uri
-        else ":root { --rag-visual-image: none; }\n"
+        ":root {\n"
+        f'    --rag-visual-image: url("{visual_uri}");\n'
+        f'    --rag-logo-image: url("{logo_uri}");\n'
+        "}\n"
     )
     base_style = """
         <style>
         :root {
-            --rag-bg: #0d1117;
-            --rag-bg-2: #111821;
-            --rag-panel: #171b22;
-            --rag-panel-2: #202631;
+            --rag-bg: #08111f;
+            --rag-bg-2: #0d1828;
+            --rag-panel: #101b2b;
+            --rag-panel-2: #17243a;
             --rag-panel-soft: rgba(255, 255, 255, 0.035);
-            --rag-border: #303743;
-            --rag-border-strong: #475263;
+            --rag-border: #2a3a52;
+            --rag-border-strong: #436080;
             --rag-text: #f6f8fb;
             --rag-muted: #aab3c2;
             --rag-muted-2: #7f8a9b;
-            --rag-blue: #5b8cff;
-            --rag-cyan: #39b8c8;
-            --rag-green: #35c27c;
+            --rag-blue: #1d75ff;
+            --rag-cyan: #17c7d4;
+            --rag-violet: #7c3aed;
+            --rag-green: #22c58e;
             --rag-amber: #d89b2b;
             --rag-gold: #f2bf5e;
-            --rag-coral: #ff7a7a;
+            --rag-coral: #ff6f91;
             --rag-red: #e46969;
             --rag-shadow: 0 18px 42px rgba(0, 0, 0, 0.28);
             --rag-shadow-soft: 0 10px 26px rgba(0, 0, 0, 0.18);
-            --rag-focus: 0 0 0 2px rgba(91, 140, 255, 0.34);
+            --rag-focus: 0 0 0 2px rgba(23, 199, 212, 0.34);
         }
 
         .stApp {
             position: relative;
             background:
-                linear-gradient(135deg, rgba(53, 194, 124, 0.06) 0%, rgba(255, 122, 122, 0.035) 42%, rgba(91, 140, 255, 0.055) 100%),
-                linear-gradient(180deg, rgba(57, 184, 200, 0.055) 0%, rgba(13, 17, 23, 0) 18rem),
+                linear-gradient(135deg, rgba(23, 199, 212, 0.08) 0%, rgba(124, 58, 237, 0.055) 45%, rgba(29, 117, 255, 0.07) 100%),
+                linear-gradient(180deg, rgba(23, 199, 212, 0.06) 0%, rgba(8, 17, 31, 0) 18rem),
                 linear-gradient(180deg, var(--rag-bg) 0%, #0a0d12 100%);
             color: var(--rag-text);
         }
@@ -683,13 +721,31 @@ def inject_enterprise_styles() -> None:
         .sidebar-brand {
             border: 1px solid var(--rag-border);
             background:
-                linear-gradient(135deg, rgba(15, 23, 34, 0.9), rgba(15, 23, 34, 0.72)),
+                radial-gradient(circle at top right, rgba(23, 199, 212, 0.18), transparent 38%),
+                linear-gradient(135deg, rgba(10, 22, 38, 0.94), rgba(15, 23, 42, 0.78)),
                 var(--rag-visual-image) center / cover no-repeat;
             border-radius: 8px;
             padding: 1rem;
             margin: 0.25rem 0 0.9rem;
             box-shadow: var(--rag-shadow-soft);
             overflow: hidden;
+        }
+
+        .sidebar-brand-row {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+
+        .sidebar-brand-logo {
+            width: 3rem;
+            height: 3rem;
+            object-fit: contain;
+            flex: 0 0 auto;
+            border-radius: 12px;
+            background: rgba(255, 255, 255, 0.08);
+            border: 1px solid rgba(23, 199, 212, 0.22);
+            padding: 0.25rem;
         }
 
         .sidebar-brand-title {
@@ -702,6 +758,25 @@ def inject_enterprise_styles() -> None:
         .sidebar-brand-subtitle {
             color: var(--rag-muted);
             font-size: 0.78rem;
+        }
+
+        .sidebar-brand-chips {
+            display: flex;
+            gap: 0.35rem;
+            flex-wrap: wrap;
+            margin-top: 0.85rem;
+        }
+
+        .sidebar-brand-chip {
+            color: #d9f8ff;
+            border: 1px solid rgba(23, 199, 212, 0.22);
+            background: rgba(23, 199, 212, 0.08);
+            border-radius: 999px;
+            padding: 0.2rem 0.48rem;
+            font-size: 0.68rem;
+            font-weight: 800;
+            letter-spacing: 0.02rem;
+            text-transform: uppercase;
         }
 
         .login-shell {
@@ -755,8 +830,9 @@ def inject_enterprise_styles() -> None:
             z-index: 5;
             border-color: rgba(71, 82, 99, 0.76) !important;
             background:
-                linear-gradient(135deg, rgba(53, 194, 124, 0.12), rgba(255, 122, 122, 0.06) 42%, rgba(91, 140, 255, 0.1)),
-                linear-gradient(180deg, rgba(28, 34, 44, 0.95), rgba(18, 23, 31, 0.95));
+                radial-gradient(circle at 18% 0%, rgba(23, 199, 212, 0.18), transparent 36%),
+                linear-gradient(135deg, rgba(29, 117, 255, 0.14), rgba(124, 58, 237, 0.08) 50%, rgba(23, 199, 212, 0.1)),
+                linear-gradient(180deg, rgba(17, 29, 48, 0.96), rgba(11, 19, 33, 0.96));
             backdrop-filter: blur(12px);
             border-radius: 8px;
             padding: 0.5rem 0.65rem;
@@ -853,14 +929,46 @@ def inject_enterprise_styles() -> None:
             border-bottom: 0;
         }
 
-        .breadcrumb {
-            color: var(--rag-muted);
-            font-size: 0.85rem;
-            font-weight: 600;
-            line-height: 1.25;
+        .topbar-brand {
             display: flex;
             align-items: center;
+            gap: 0.75rem;
             min-height: 2.5rem;
+        }
+
+        .topbar-logo {
+            width: 2.45rem;
+            height: 2.45rem;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 10px;
+            border: 1px solid rgba(23, 199, 212, 0.24);
+            background: rgba(255, 255, 255, 0.075);
+            overflow: hidden;
+            flex: 0 0 auto;
+        }
+
+        .topbar-logo img {
+            width: 2.2rem;
+            height: 2.2rem;
+            object-fit: contain;
+            display: block;
+        }
+
+        .topbar-product {
+            color: var(--rag-text);
+            font-size: 0.98rem;
+            font-weight: 850;
+            line-height: 1.15;
+        }
+
+        .breadcrumb {
+            color: var(--rag-muted);
+            font-size: 0.78rem;
+            font-weight: 650;
+            line-height: 1.25;
+            margin-top: 0.08rem;
         }
 
         .topbar-actions {
@@ -925,7 +1033,7 @@ def inject_enterprise_styles() -> None:
             display: inline-flex;
             align-items: center;
             border: 1px solid var(--rag-border);
-            background: linear-gradient(135deg, rgba(91, 140, 255, 0.18), rgba(53, 194, 124, 0.12));
+            background: linear-gradient(135deg, rgba(29, 117, 255, 0.2), rgba(23, 199, 212, 0.12));
             color: var(--rag-text);
             border-radius: 999px;
             padding: 0.25rem 0.65rem;
@@ -997,7 +1105,7 @@ def inject_enterprise_styles() -> None:
             padding: 1.35rem 1.45rem;
             margin-bottom: 1.2rem;
             background:
-                linear-gradient(90deg, rgba(13, 17, 23, 0.96) 0%, rgba(13, 17, 23, 0.82) 48%, rgba(13, 17, 23, 0.62) 100%),
+                linear-gradient(90deg, rgba(8, 17, 31, 0.98) 0%, rgba(8, 17, 31, 0.86) 48%, rgba(8, 17, 31, 0.68) 100%),
                 var(--rag-visual-image) right center / min(43rem, 48vw) auto no-repeat;
             box-shadow: var(--rag-shadow-soft);
             animation: ragFadeLift 420ms ease both;
@@ -1008,7 +1116,7 @@ def inject_enterprise_styles() -> None:
             position: absolute;
             inset: 0 0 auto;
             height: 3px;
-            background: linear-gradient(90deg, var(--rag-cyan), var(--rag-green), var(--rag-gold), var(--rag-coral));
+            background: linear-gradient(90deg, var(--rag-cyan), var(--rag-blue), var(--rag-violet));
         }
 
         .rag-title > div {
@@ -1021,6 +1129,15 @@ def inject_enterprise_styles() -> None:
             font-size: 2rem;
             line-height: 1.1;
             letter-spacing: 0;
+        }
+
+        .rag-eyebrow {
+            color: var(--rag-cyan);
+            font-size: 0.72rem;
+            font-weight: 850;
+            letter-spacing: 0.08rem;
+            text-transform: uppercase;
+            margin-bottom: 0.4rem;
         }
 
         .rag-subtle {
@@ -1747,6 +1864,7 @@ def render_header(title: str, subtitle: str) -> None:
         f"""
         <div class="rag-title">
             <div>
+                <div class="rag-eyebrow">{escape_html(APP_KIND)}</div>
                 <h1>{escape_html(title)}</h1>
                 <div class="rag-subtle">{escape_html(subtitle)}</div>
             </div>
@@ -2464,13 +2582,22 @@ def conversation_retrieval_query(query: str, documents: dict[str, dict] | None =
 
 
 def render_top_bar(selected: str) -> None:
+    logo_uri = image_data_uri(str(ADEPTRAG_LOGO_ASSET))
     with st.container(border=True, key="top_bar"):
         menu_col, breadcrumb_col, actions_col = st.columns([0.045, 0.655, 0.3], gap="small")
         with menu_col:
             render_navigation_menu()
         with breadcrumb_col:
             st.markdown(
-                f'<div class="breadcrumb">Enterprise RAG / {escape_html(selected)}</div>',
+                f"""
+                <div class="topbar-brand">
+                    <span class="topbar-logo"><img src="{logo_uri}" alt="{escape_html(APP_NAME)} logo"></span>
+                    <span>
+                        <div class="topbar-product">{escape_html(APP_NAME)}</div>
+                        <div class="breadcrumb">{escape_html(APP_KIND)} / {escape_html(selected)}</div>
+                    </span>
+                </div>
+                """,
                 unsafe_allow_html=True,
             )
         with actions_col:
@@ -2544,6 +2671,7 @@ def render_workspace_nav(selected: str) -> None:
 
 
 def render_app_sidebar(selected: str) -> str:
+    logo_uri = image_data_uri(str(ADEPTRAG_LOGO_ASSET))
     items = accessible_nav_items()
     if selected not in items:
         selected = default_nav_selection()
@@ -2551,10 +2679,20 @@ def render_app_sidebar(selected: str) -> str:
 
     with st.container(border=True, key="app_sidebar"):
         st.markdown(
-            """
+            f"""
             <div class="sidebar-brand">
-                <div class="sidebar-brand-title">Enterprise RAG Console</div>
-                <div class="sidebar-brand-subtitle">Knowledge retrieval workspace</div>
+                <div class="sidebar-brand-row">
+                    <img class="sidebar-brand-logo" src="{logo_uri}" alt="{escape_html(APP_NAME)} logo">
+                    <div>
+                        <div class="sidebar-brand-title">{escape_html(APP_NAME)}</div>
+                        <div class="sidebar-brand-subtitle">{escape_html(APP_TAGLINE)}</div>
+                    </div>
+                </div>
+                <div class="sidebar-brand-chips">
+                    <span class="sidebar-brand-chip">RAG</span>
+                    <span class="sidebar-brand-chip">Citations</span>
+                    <span class="sidebar-brand-chip">Audit</span>
+                </div>
             </div>
             """,
             unsafe_allow_html=True,
@@ -3719,11 +3857,22 @@ def render_metric_grid(embedding_model: str | None = None) -> None:
 
 
 def render_sidebar() -> str:
+    logo_uri = image_data_uri(str(ADEPTRAG_LOGO_ASSET))
     st.sidebar.markdown(
-        """
+        f"""
         <div class="sidebar-brand">
-            <div class="sidebar-brand-title">Enterprise RAG Console</div>
-            <div class="sidebar-brand-subtitle">Knowledge retrieval workspace</div>
+            <div class="sidebar-brand-row">
+                <img class="sidebar-brand-logo" src="{logo_uri}" alt="{escape_html(APP_NAME)} logo">
+                <div>
+                    <div class="sidebar-brand-title">{escape_html(APP_NAME)}</div>
+                    <div class="sidebar-brand-subtitle">{escape_html(APP_TAGLINE)}</div>
+                </div>
+            </div>
+            <div class="sidebar-brand-chips">
+                <span class="sidebar-brand-chip">RAG</span>
+                <span class="sidebar-brand-chip">Citations</span>
+                <span class="sidebar-brand-chip">Audit</span>
+            </div>
         </div>
         """,
         unsafe_allow_html=True,
@@ -4210,7 +4359,7 @@ def render_ask() -> None:
                 f"""
                 <div class="conversation-action-row">
                     <div>
-                        <div class="conversation-action-title">Enterprise RAG Ask</div>
+                        <div class="conversation-action-title">{escape_html(APP_NAME)} Ask</div>
                         <div class="conversation-action-meta">{escape_html(active_embedding_model())} - latest answer workspace</div>
                     </div>
                 </div>
@@ -4289,7 +4438,7 @@ def render_ask() -> None:
                 with st.expander("Citations", expanded=False):
                     render_answer_sources(result, last["min_score"], last["runtime_settings"], key_prefix="ask")
 
-        prompt = st.chat_input("Ask Enterprise RAG")
+        prompt = st.chat_input(f"Ask {APP_NAME}")
         query = voice_prompt.strip() if send_voice_prompt else (prompt or "").strip()
         if query:
             answer_language = response_language(voice_settings["language"], query)
@@ -4394,7 +4543,7 @@ def conversation_context_prompt(new_prompt: str) -> str:
 
 
 def conversation_export_markdown() -> str:
-    lines = ["# Enterprise RAG Conversation", ""]
+    lines = [f"# {APP_NAME} Conversation", ""]
     for message in st.session_state.conversation_messages:
         role = "User" if message["role"] == "user" else "Assistant"
         lines.append(f"## {role}")
@@ -4488,7 +4637,7 @@ def render_conversation() -> None:
                 f"""
                 <div class="conversation-action-row">
                     <div>
-                        <div class="conversation-action-title">Enterprise RAG Chat</div>
+                        <div class="conversation-action-title">{escape_html(APP_NAME)} Chat</div>
                         <div class="conversation-action-meta">{escape_html(active_embedding_model())} - {len(st.session_state.conversation_messages)} messages</div>
                     </div>
                 </div>
@@ -4596,7 +4745,7 @@ def render_conversation() -> None:
                             key_prefix=f"conversation_{message_index}",
                         )
 
-        prompt = st.chat_input("Message Enterprise RAG")
+        prompt = st.chat_input(f"Message {APP_NAME}")
         prompt_to_send = voice_prompt.strip() if send_voice_prompt else (prompt or "").strip()
         if prompt_to_send:
             answer_language = response_language(voice_settings["language"], prompt_to_send)
@@ -5684,7 +5833,7 @@ def render_administration() -> None:
         try:
             if require_demo_budget("OpenAI connection test", active_settings=runtime_settings):
                 with st.status("Calling OpenAI embeddings API", expanded=False):
-                    generate_embeddings(["enterprise rag connection test"], active_settings=runtime_settings)
+                    generate_embeddings([f"{APP_NAME.lower()} connection test"], active_settings=runtime_settings)
                 st.success("OpenAI connection verified.")
         except RAGApplicationError as exc:
             st.error(exc.message)
@@ -5814,7 +5963,7 @@ def render_selected_page(selected: str) -> None:
 
 
 def main() -> None:
-    st.set_page_config(page_title="Enterprise RAG", layout="wide", initial_sidebar_state="expanded")
+    st.set_page_config(page_title=APP_NAME, layout="wide", initial_sidebar_state="expanded")
     init_session_state()
     inject_enterprise_styles()
 
