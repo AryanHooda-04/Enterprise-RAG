@@ -7,7 +7,7 @@ import logging
 import re
 from io import BytesIO
 from collections import Counter
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from threading import Lock
 from uuid import uuid4
@@ -154,6 +154,8 @@ def init_session_state() -> None:
     st.session_state.setdefault("last_evaluation_results", [])
     st.session_state.setdefault("feedback_submissions", {})
     st.session_state.setdefault("ingestion_queue", [])
+    st.session_state.setdefault("demo_session_calls_used", 0)
+    st.session_state.setdefault("demo_blocked_actions", [])
     st.session_state.setdefault("ask_session_id", uuid4().hex)
     st.session_state.setdefault("conversation_session_id", uuid4().hex)
 
@@ -1272,6 +1274,134 @@ def compact_error_detail(exc: BaseException, max_length: int = 280) -> str:
     return message[: max_length - 3] + "..."
 
 
+def demo_limits_enabled(active_settings=settings) -> bool:
+    return bool(active_settings.demo_limits_enabled)
+
+
+def usage_record_day(record: dict) -> str:
+    timestamp = record.get("timestamp")
+    if not timestamp:
+        return "unknown"
+    try:
+        parsed = datetime.fromisoformat(str(timestamp).replace("Z", "+00:00"))
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=timezone.utc)
+        return parsed.astimezone(timezone.utc).strftime("%Y-%m-%d")
+    except ValueError:
+        return "unknown"
+
+
+def demo_usage_status(active_settings=settings) -> dict:
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    today_records = [record for record in load_usage(active_settings) if usage_record_day(record) == today]
+    return {
+        "enabled": demo_limits_enabled(active_settings),
+        "daily_calls": len(today_records),
+        "daily_tokens": sum(int(record.get("total_tokens") or 0) for record in today_records),
+        "session_calls": int(st.session_state.get("demo_session_calls_used", 0) or 0),
+        "daily_call_limit": active_settings.demo_daily_call_limit,
+        "daily_token_limit": active_settings.demo_daily_token_limit,
+        "session_call_limit": active_settings.demo_session_call_limit,
+    }
+
+
+def limit_text(used: int, limit: int) -> str:
+    return f"{used}/unlimited" if limit <= 0 else f"{used}/{limit}"
+
+
+def demo_limit_reason(action_label: str, estimated_calls: int, active_settings=settings) -> str | None:
+    if not demo_limits_enabled(active_settings):
+        return None
+
+    status = demo_usage_status(active_settings)
+    reasons: list[str] = []
+    if status["session_call_limit"] > 0 and status["session_calls"] + estimated_calls > status["session_call_limit"]:
+        reasons.append(
+            f"session limit reached ({limit_text(status['session_calls'], status['session_call_limit'])} calls)"
+        )
+    if status["daily_call_limit"] > 0 and status["daily_calls"] + estimated_calls > status["daily_call_limit"]:
+        reasons.append(
+            f"daily demo limit reached ({limit_text(status['daily_calls'], status['daily_call_limit'])} calls today)"
+        )
+    if status["daily_token_limit"] > 0 and status["daily_tokens"] >= status["daily_token_limit"]:
+        reasons.append(
+            f"daily token budget reached ({limit_text(status['daily_tokens'], status['daily_token_limit'])} tokens today)"
+        )
+
+    if not reasons:
+        return None
+    return f"{action_label} is paused because the public demo usage limit is active: {', '.join(reasons)}."
+
+
+def require_demo_budget(action_label: str, *, estimated_calls: int = 1, active_settings=settings) -> bool:
+    reason = demo_limit_reason(action_label, max(1, estimated_calls), active_settings)
+    if reason:
+        st.warning(reason)
+        st.caption("Try again later, use fewer demo actions, or ask the owner to raise/disable demo limits.")
+        st.session_state.demo_blocked_actions.append(
+            {
+                "time": datetime.now().strftime("%H:%M:%S"),
+                "action": action_label,
+                "reason": reason,
+            }
+        )
+        return False
+
+    if demo_limits_enabled(active_settings):
+        st.session_state.demo_session_calls_used = (
+            int(st.session_state.get("demo_session_calls_used", 0) or 0) + max(1, estimated_calls)
+        )
+    return True
+
+
+def estimated_rag_calls(search_mode: str) -> int:
+    return 2 if str(search_mode).lower() in {"hybrid", "semantic"} else 1
+
+
+def demo_top_k_limit(active_settings=settings) -> int:
+    if not demo_limits_enabled(active_settings) or active_settings.demo_max_top_k <= 0:
+        return 20
+    return max(1, min(20, active_settings.demo_max_top_k))
+
+
+def demo_top_k_value(active_settings=settings) -> int:
+    return max(1, min(active_settings.top_k, demo_top_k_limit(active_settings)))
+
+
+def normalize_demo_top_k_state(key: str, active_settings=settings) -> None:
+    limit = demo_top_k_limit(active_settings)
+    try:
+        current = int(st.session_state.get(key, demo_top_k_value(active_settings)))
+    except (TypeError, ValueError):
+        current = demo_top_k_value(active_settings)
+    if current > limit:
+        st.session_state[key] = limit
+
+
+def demo_upload_file_limit(active_settings=settings) -> int:
+    if not demo_limits_enabled(active_settings) or active_settings.demo_max_upload_files <= 0:
+        return active_settings.max_upload_files
+    return max(1, min(active_settings.max_upload_files, active_settings.demo_max_upload_files))
+
+
+def demo_upload_size_limit_mb(active_settings=settings) -> int:
+    if not demo_limits_enabled(active_settings) or active_settings.demo_max_upload_size_mb <= 0:
+        return active_settings.max_upload_size_mb
+    return max(1, min(active_settings.max_upload_size_mb, active_settings.demo_max_upload_size_mb))
+
+
+def render_demo_limit_status(active_settings=settings) -> None:
+    if not demo_limits_enabled(active_settings):
+        return
+    status = demo_usage_status(active_settings)
+    st.caption(
+        "Demo limits: "
+        f"session calls {limit_text(status['session_calls'], status['session_call_limit'])}, "
+        f"daily calls {limit_text(status['daily_calls'], status['daily_call_limit'])}, "
+        f"daily tokens {limit_text(status['daily_tokens'], status['daily_token_limit'])}."
+    )
+
+
 def option_index(options: tuple[str, ...], value: str) -> int:
     try:
         return options.index(value)
@@ -1399,6 +1529,8 @@ def render_voice_input(
     audio_bytes = recorded_audio.getvalue()
     audio_hash = hashlib.sha256(audio_bytes).hexdigest()
     if st.session_state.get(f"{prefix}_audio_hash") != audio_hash:
+        if not require_demo_budget("Voice transcription", active_settings=runtime_settings):
+            return st.session_state.get(f"{prefix}_transcript", "")
         with st.spinner("Transcribing voice input"):
             transcript = transcribe_audio(
                 audio_bytes,
@@ -1443,6 +1575,8 @@ def render_spoken_answer(
 
     cache = st.session_state.speech_audio_cache
     if cache_key not in cache:
+        if not require_demo_budget("Voice playback", active_settings=runtime_settings):
+            return
         with st.spinner("Generating voice answer"):
             try:
                 cache[cache_key] = synthesize_speech(
@@ -2366,6 +2500,13 @@ def run_agentic_rag(
             "filters": filters,
         }
 
+    if not require_demo_budget(
+        "Agentic RAG run",
+        estimated_calls=estimated_rag_calls(search_mode),
+        active_settings=runtime_settings,
+    ):
+        raise RAGApplicationError("Demo usage limit reached before agent execution.")
+
     if tool_name in {"summarize_documents", "compare_documents", "generate_report"} and effective_hashes:
         chunks = collect_document_context_chunks(store, effective_hashes, limit_per_document=8)
         plan.append("Used focused document chunks instead of open-ended search.")
@@ -2495,6 +2636,12 @@ def generate_rag_result(
     stream_placeholder=None,
 ) -> dict:
     pipeline = get_pipeline(chat_model, embedding_model)
+    if not require_demo_budget(
+        "RAG answer generation",
+        estimated_calls=estimated_rag_calls(search_mode),
+        active_settings=pipeline.settings,
+    ):
+        raise RAGApplicationError("Demo usage limit reached before answer generation.")
     effective_retrieval_query = retrieval_query or query
     chunks = pipeline.retrieve_chunks(
         effective_retrieval_query,
@@ -2743,7 +2890,8 @@ def persist_uploaded_file(uploaded_file, runtime_settings) -> tuple[Path, str, s
 
     runtime_settings.ensure_directories()
     temp_path = runtime_settings.upload_dir / f"pending_{uuid4().hex}_{original_name}"
-    max_bytes = runtime_settings.max_upload_size_mb * 1024 * 1024
+    max_upload_mb = demo_upload_size_limit_mb(runtime_settings)
+    max_bytes = max_upload_mb * 1024 * 1024
     digest = hashlib.sha256()
     size = 0
 
@@ -2759,7 +2907,7 @@ def persist_uploaded_file(uploaded_file, runtime_settings) -> tuple[Path, str, s
                 output.close()
                 temp_path.unlink(missing_ok=True)
                 raise RAGApplicationError(
-                    f"{original_name} exceeds the {format_size(runtime_settings.max_upload_size_mb)} per-file limit."
+                    f"{original_name} exceeds the {format_size(max_upload_mb)} per-file demo limit."
                 )
 
             digest.update(block)
@@ -2834,7 +2982,11 @@ def enqueue_uploaded_files(
 ) -> tuple[int, list[str]]:
     added = 0
     failures: list[str] = []
+    max_files = demo_upload_file_limit(runtime_settings)
     for uploaded_file in uploaded_files or []:
+        if added >= max_files:
+            failures.append(f"{uploaded_file.name}: demo upload batch limit is {max_files} file(s).")
+            continue
         try:
             saved_path, file_hash, original_name = persist_uploaded_file(uploaded_file, runtime_settings)
             st.session_state.ingestion_queue.append(
@@ -2885,6 +3037,13 @@ def process_ingestion_queue(runtime_settings) -> dict:
                 vision_ingestion_enabled=bool(item.get("vision_enabled", runtime_settings.vision_ingestion_enabled)),
                 vision_detail=item.get("vision_detail", runtime_settings.vision_detail),
             )
+            if not require_demo_budget("Document ingestion", estimated_calls=2, active_settings=item_settings):
+                item["status"] = "failed"
+                item["message"] = "Paused by public demo usage limit"
+                item["failed_at"] = datetime.now().strftime("%H:%M:%S")
+                summary["failed"] += 1
+                progress.progress(index / len(queued_items))
+                continue
             result = ingest_saved_path(
                 Path(item["saved_path"]),
                 item["file_hash"],
@@ -3056,6 +3215,7 @@ def render_sidebar() -> str:
     st.sidebar.write(f"Chat model: `{active_chat_model()}`")
     st.sidebar.write(f"Vision model: `{active_vision_model()}`")
     st.sidebar.write(f"SSL: `{ssl_runtime_description(settings)}`")
+    render_demo_limit_status(active_settings())
     st.sidebar.divider()
 
     if st.sidebar.button("Refresh local index", use_container_width=True):
@@ -3065,9 +3225,11 @@ def render_sidebar() -> str:
 
     if st.sidebar.button("Test OpenAI connection", use_container_width=True):
         try:
-            with st.sidebar.status("Calling embeddings API", expanded=False):
-                generate_embeddings(["connection test"], active_settings=active_settings())
-            st.sidebar.success("Connection verified")
+            runtime_settings = active_settings()
+            if require_demo_budget("OpenAI connection test", active_settings=runtime_settings):
+                with st.sidebar.status("Calling embeddings API", expanded=False):
+                    generate_embeddings(["connection test"], active_settings=runtime_settings)
+                st.sidebar.success("Connection verified")
         except RAGApplicationError as exc:
             st.sidebar.error(exc.message)
         except Exception as exc:
@@ -3143,9 +3305,10 @@ def render_ingestion() -> None:
         )
         selected_count = len(uploaded_files or [])
         st.caption(
-            f"{selected_count} selected. Batch limit: {settings.max_upload_files}. "
-            f"Per-file limit: {format_size(settings.max_upload_size_mb)}."
+            f"{selected_count} selected. Demo batch limit: {demo_upload_file_limit(settings)}. "
+            f"Per-file demo limit: {format_size(demo_upload_size_limit_mb(settings))}."
         )
+        render_demo_limit_status(settings)
 
     embedding_model = active_embedding_model()
     vision_enabled = active_vision_enabled()
@@ -3228,9 +3391,10 @@ def render_ingestion() -> None:
         vision_ingestion_enabled=st.session_state.vision_ingestion_enabled,
         vision_detail=st.session_state.vision_detail,
     )
-    start_disabled = not uploaded_files or len(uploaded_files) > runtime_settings.max_upload_files
-    if uploaded_files and len(uploaded_files) > runtime_settings.max_upload_files:
-        st.error(f"Select {runtime_settings.max_upload_files} documents or fewer per batch.")
+    upload_file_limit = demo_upload_file_limit(runtime_settings)
+    start_disabled = not uploaded_files or len(uploaded_files) > upload_file_limit
+    if uploaded_files and len(uploaded_files) > upload_file_limit:
+        st.error(f"Select {upload_file_limit} documents or fewer per demo batch.")
 
     upload_action_col, _ = st.columns([1, 2])
     if upload_action_col.button("Add to queue", type="primary", disabled=start_disabled, use_container_width=True):
@@ -3453,11 +3617,12 @@ def render_ask() -> None:
                         help="Hybrid combines semantic FAISS search with keyword/BM25-style matching.",
                     )
                     base_runtime_settings = active_settings(chat_model=chat_model, embedding_model=embedding_model)
+                    normalize_demo_top_k_state("ask_top_k", base_runtime_settings)
                     top_k = st.slider(
                         "Top K",
                         min_value=1,
-                        max_value=20,
-                        value=base_runtime_settings.top_k,
+                        max_value=demo_top_k_limit(base_runtime_settings),
+                        value=demo_top_k_value(base_runtime_settings),
                         key="ask_top_k",
                     )
                     min_score = st.slider(
@@ -3736,11 +3901,12 @@ def render_conversation() -> None:
                         help="Hybrid combines semantic FAISS search with keyword/BM25-style matching.",
                     )
                     base_runtime_settings = active_settings(chat_model=chat_model, embedding_model=embedding_model)
+                    normalize_demo_top_k_state("conversation_top_k", base_runtime_settings)
                     top_k = st.slider(
                         "Top K",
                         min_value=1,
-                        max_value=20,
-                        value=base_runtime_settings.top_k,
+                        max_value=demo_top_k_limit(base_runtime_settings),
+                        value=demo_top_k_value(base_runtime_settings),
                         key="conversation_top_k",
                     )
                     min_score = st.slider(
@@ -4032,7 +4198,14 @@ def render_agent() -> None:
                     key="agent_search_mode",
                 )
                 runtime_settings = active_settings(chat_model=chat_model, embedding_model=embedding_model)
-                top_k = st.slider("Top K", 1, 20, runtime_settings.top_k, key="agent_top_k")
+                normalize_demo_top_k_state("agent_top_k", runtime_settings)
+                top_k = st.slider(
+                    "Top K",
+                    1,
+                    demo_top_k_limit(runtime_settings),
+                    demo_top_k_value(runtime_settings),
+                    key="agent_top_k",
+                )
                 min_score = st.slider("Minimum score", 0.0, 1.0, 0.0, step=0.01, key="agent_min_score")
             with voice_col:
                 st.subheader("Voice")
@@ -4257,7 +4430,14 @@ def render_retrieval_audit() -> None:
         default="Hybrid",
         key="audit_search_mode",
     )
-    top_k = col_b.slider("Top K", min_value=1, max_value=20, value=runtime_settings.top_k, key="audit_top_k")
+    normalize_demo_top_k_state("audit_top_k", runtime_settings)
+    top_k = col_b.slider(
+        "Top K",
+        min_value=1,
+        max_value=demo_top_k_limit(runtime_settings),
+        value=demo_top_k_value(runtime_settings),
+        key="audit_top_k",
+    )
     min_score = col_c.slider(
         "Minimum score",
         min_value=0.0,
@@ -4268,6 +4448,13 @@ def render_retrieval_audit() -> None:
     )
 
     if st.button("Run retrieval audit", type="primary", disabled=not query.strip()):
+        audit_calls = 1 if str(search_mode).lower() in {"hybrid", "semantic"} else 0
+        if audit_calls and not require_demo_budget(
+            "Retrieval audit",
+            estimated_calls=audit_calls,
+            active_settings=runtime_settings,
+        ):
+            return
         with st.spinner("Searching vector index"):
             results = Retriever(store, runtime_settings).retrieve(
                 query,
@@ -4529,11 +4716,26 @@ def render_evaluation() -> None:
             key="evaluation_search_mode",
         )
     with control_col_b:
-        top_k = st.slider("Top K", 1, 20, runtime_settings.top_k, key="evaluation_top_k")
+        normalize_demo_top_k_state("evaluation_top_k", runtime_settings)
+        top_k = st.slider(
+            "Top K",
+            1,
+            demo_top_k_limit(runtime_settings),
+            demo_top_k_value(runtime_settings),
+            key="evaluation_top_k",
+        )
     with control_col_c:
         min_score = st.slider("Minimum score", 0.0, 1.0, 0.0, step=0.01, key="evaluation_min_score")
 
     cases = normalize_evaluation_cases(edited_cases.to_dict("records"))
+    cases_to_run = cases
+    if demo_limits_enabled(runtime_settings) and runtime_settings.demo_max_evaluation_cases > 0:
+        cases_to_run = cases[: runtime_settings.demo_max_evaluation_cases]
+        if len(cases) > len(cases_to_run):
+            st.info(
+                f"Public demo mode will run the first {len(cases_to_run)} evaluation case(s). "
+                f"Set RAG_DEMO_MAX_EVALUATION_CASES higher to allow more."
+            )
     run_col, save_col, clear_col = st.columns([1, 0.35, 0.35], gap="small")
     run_clicked = run_col.button(
         "Run evaluation",
@@ -4555,8 +4757,8 @@ def render_evaluation() -> None:
         rows: list[dict] = []
         progress = st.progress(0)
         status = st.empty()
-        for index, case in enumerate(cases, start=1):
-            status.info(f"Evaluating {index} of {len(cases)}: {case['Question']}")
+        for index, case in enumerate(cases_to_run, start=1):
+            status.info(f"Evaluating {index} of {len(cases_to_run)}: {case['Question']}")
             try:
                 result = generate_rag_result(
                     query=case["Question"],
@@ -4572,8 +4774,8 @@ def render_evaluation() -> None:
             except Exception as exc:
                 logger.exception("Evaluation case failed: %s", exc)
                 rows.append(evaluation_error_row(case, exc, search_mode=str(search_mode).lower()))
-            progress.progress(index / len(cases))
-        status.success(f"Evaluation completed for {len(cases)} case(s).")
+            progress.progress(index / len(cases_to_run))
+        status.success(f"Evaluation completed for {len(cases_to_run)} case(s).")
         st.session_state.last_evaluation_results = rows
 
     results = st.session_state.last_evaluation_results
@@ -4863,6 +5065,34 @@ def render_admin_analytics_dashboard(runtime_settings) -> None:
             st.caption("No feedback submitted yet.")
 
 
+def render_demo_limits_admin(runtime_settings) -> None:
+    st.subheader("Public Demo Limits")
+    if not demo_limits_enabled(runtime_settings):
+        st.success("Demo usage limits are disabled for this deployment.")
+        return
+
+    status = demo_usage_status(runtime_settings)
+    col_a, col_b, col_c, col_d = st.columns(4)
+    col_a.metric("Session Calls", limit_text(status["session_calls"], status["session_call_limit"]))
+    col_b.metric("Daily Calls", limit_text(status["daily_calls"], status["daily_call_limit"]))
+    col_c.metric("Daily Tokens", limit_text(status["daily_tokens"], status["daily_token_limit"]))
+    col_d.metric("Max Top K", runtime_settings.demo_max_top_k)
+    st.caption(
+        "Configured by RAG_DEMO_LIMITS_ENABLED, RAG_DEMO_SESSION_CALL_LIMIT, "
+        "RAG_DEMO_DAILY_CALL_LIMIT, RAG_DEMO_DAILY_TOKEN_LIMIT, "
+        "RAG_DEMO_MAX_UPLOAD_FILES, RAG_DEMO_MAX_UPLOAD_SIZE_MB, "
+        "RAG_DEMO_MAX_TOP_K, RAG_DEMO_MAX_EVALUATION_CASES, "
+        "RAG_DEMO_MAX_VISUAL_PAGES, and RAG_DEMO_MAX_DOCX_IMAGES."
+    )
+    if st.session_state.demo_blocked_actions:
+        with st.expander("Blocked demo actions"):
+            st.dataframe(
+                list(reversed(st.session_state.demo_blocked_actions[-25:])),
+                hide_index=True,
+                use_container_width=True,
+            )
+
+
 def render_administration() -> None:
     render_header("Administration", "Runtime configuration, connectivity, and local storage state.")
     if not require_admin_ui():
@@ -4891,17 +5121,22 @@ def render_administration() -> None:
         st.write(f"Upload directory: `{runtime_settings.upload_dir}`")
         st.write(f"Max files per batch: `{runtime_settings.max_upload_files}`")
         st.write(f"Per-file upload limit: `{format_size(runtime_settings.max_upload_size_mb)}`")
+        if demo_limits_enabled(runtime_settings):
+            st.write(f"Demo files per batch: `{demo_upload_file_limit(runtime_settings)}`")
+            st.write(f"Demo per-file upload limit: `{format_size(demo_upload_size_limit_mb(runtime_settings))}`")
 
     st.subheader("Connectivity")
     st.write(f"SSL mode: `{ssl_runtime_description(settings)}`")
     if st.button("Run connection test", type="primary"):
         try:
-            with st.status("Calling OpenAI embeddings API", expanded=False):
-                generate_embeddings(["enterprise rag connection test"], active_settings=runtime_settings)
-            st.success("OpenAI connection verified.")
+            if require_demo_budget("OpenAI connection test", active_settings=runtime_settings):
+                with st.status("Calling OpenAI embeddings API", expanded=False):
+                    generate_embeddings(["enterprise rag connection test"], active_settings=runtime_settings)
+                st.success("OpenAI connection verified.")
         except RAGApplicationError as exc:
             st.error(exc.message)
 
+    render_demo_limits_admin(runtime_settings)
     render_admin_analytics_dashboard(runtime_settings)
 
     st.subheader("Usage Event Export")
@@ -5042,6 +5277,7 @@ def main() -> None:
     render_top_bar(selected)
     if navigation_mode in {"Top row", "Both"}:
         render_workspace_nav(selected)
+    render_demo_limit_status(active_settings())
 
     try:
         if navigation_mode in {"Sidebar", "Both"}:

@@ -213,6 +213,16 @@ class Settings:
     max_image_dimension_px: int = _env_int("MAX_IMAGE_DIMENSION_PX", 1600)
     voice_output_enabled: bool = _env_bool("VOICE_OUTPUT_ENABLED", True)
     default_voice_language: str = os.getenv("VOICE_LANGUAGE", "Auto")
+    demo_limits_enabled: bool = _env_bool("RAG_DEMO_LIMITS_ENABLED", True)
+    demo_daily_call_limit: int = _env_int("RAG_DEMO_DAILY_CALL_LIMIT", 80)
+    demo_daily_token_limit: int = _env_int("RAG_DEMO_DAILY_TOKEN_LIMIT", 200_000)
+    demo_session_call_limit: int = _env_int("RAG_DEMO_SESSION_CALL_LIMIT", 12)
+    demo_max_upload_files: int = _env_int("RAG_DEMO_MAX_UPLOAD_FILES", 3)
+    demo_max_upload_size_mb: int = _env_int("RAG_DEMO_MAX_UPLOAD_SIZE_MB", 10)
+    demo_max_top_k: int = _env_int("RAG_DEMO_MAX_TOP_K", 5)
+    demo_max_evaluation_cases: int = _env_int("RAG_DEMO_MAX_EVALUATION_CASES", 5)
+    demo_max_visual_pages: int = _env_int("RAG_DEMO_MAX_VISUAL_PAGES", 5)
+    demo_max_docx_images: int = _env_int("RAG_DEMO_MAX_DOCX_IMAGES", 5)
 
     data_dir: Path = DEFAULT_DATA_DIR
     upload_dir: Path = Path(os.getenv("RAG_UPLOAD_DIR", DEFAULT_DATA_DIR / "uploads")).resolve()
@@ -265,6 +275,13 @@ def settings_for_models(
     resolved_transcription_model = transcription_model or base_settings.openai_transcription_model
     resolved_tts_model = tts_model or base_settings.openai_tts_model
     resolved_tts_voice = tts_voice or base_settings.openai_tts_voice
+    resolved_max_visual_pages = base_settings.max_visual_pages
+    resolved_max_docx_images = base_settings.max_docx_images
+    if base_settings.demo_limits_enabled:
+        if base_settings.demo_max_visual_pages > 0:
+            resolved_max_visual_pages = min(base_settings.max_visual_pages, base_settings.demo_max_visual_pages)
+        if base_settings.demo_max_docx_images > 0:
+            resolved_max_docx_images = min(base_settings.max_docx_images, base_settings.demo_max_docx_images)
     index_dir = Path(
         os.getenv(
             "RAG_INDEX_DIR",
@@ -286,6 +303,8 @@ def settings_for_models(
             else vision_ingestion_enabled
         ),
         vision_detail=vision_detail or base_settings.vision_detail,
+        max_visual_pages=resolved_max_visual_pages,
+        max_docx_images=resolved_max_docx_images,
         index_dir=index_dir,
         index_path=Path(os.getenv("RAG_FAISS_INDEX_PATH", index_dir / "index.faiss")).resolve(),
         chunks_path=Path(os.getenv("RAG_CHUNKS_PATH", index_dir / "chunks.json")).resolve(),

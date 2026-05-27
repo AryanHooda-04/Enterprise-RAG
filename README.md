@@ -178,6 +178,12 @@ tokens, audio/image units, document-linked usage, failed upload status, top
 queried/cited documents, feedback trends, and configurable cost estimates from
 Administration, then export JSONL or CSV for approved cost reporting.
 
+Public Streamlit demos include usage guardrails by default. The app limits
+per-session actions, daily OpenAI calls/tokens, demo upload size/count, Top K,
+evaluation batch size, and image-aware ingestion volume so visitors can try the
+project without creating an open-ended bill. Admins can see the current
+demo-limit status in Administration.
+
 The Upload tab supports:
 
 - Multiple file upload, up to `MAX_UPLOAD_FILES` documents per batch.
@@ -316,6 +322,16 @@ All values are environment-driven. Common settings:
 | `MAX_IMAGE_DIMENSION_PX` | `1600` | Maximum image dimension sent to the vision model |
 | `VOICE_OUTPUT_ENABLED` | `true` | Enable spoken answers by default |
 | `VOICE_LANGUAGE` | `Auto` | Default voice language mode |
+| `RAG_DEMO_LIMITS_ENABLED` | `true` | Enable public Streamlit demo guardrails |
+| `RAG_DEMO_DAILY_CALL_LIMIT` | `80` | Deployment-wide OpenAI call limit per UTC day |
+| `RAG_DEMO_DAILY_TOKEN_LIMIT` | `200000` | Deployment-wide token budget per UTC day |
+| `RAG_DEMO_SESSION_CALL_LIMIT` | `12` | Per-browser-session demo action limit |
+| `RAG_DEMO_MAX_UPLOAD_FILES` | `3` | Demo upload files allowed per batch |
+| `RAG_DEMO_MAX_UPLOAD_SIZE_MB` | `10` | Demo per-file upload size |
+| `RAG_DEMO_MAX_TOP_K` | `5` | Maximum Top K shown in demo mode |
+| `RAG_DEMO_MAX_EVALUATION_CASES` | `5` | Maximum evaluation cases run in one demo batch |
+| `RAG_DEMO_MAX_VISUAL_PAGES` | `5` | Maximum PDF visual pages processed in demo mode |
+| `RAG_DEMO_MAX_DOCX_IMAGES` | `5` | Maximum DOCX embedded images processed in demo mode |
 | `RAG_DATA_DIR` | `data` | Local upload/index storage |
 | `RAG_FEEDBACK_PATH` | `data/feedback.jsonl` | Local answer feedback store |
 | `RAG_USAGE_PATH` | `data/usage.jsonl` | Local usage and cost-tracking event store |
