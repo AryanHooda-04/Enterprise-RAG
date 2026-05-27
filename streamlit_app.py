@@ -813,32 +813,42 @@ def inject_enterprise_styles() -> None:
         .st-key-top_bar {
             position: relative;
             z-index: 5;
-            border-color: rgba(71, 82, 99, 0.76) !important;
+            border-color: rgba(74, 112, 158, 0.72) !important;
             background:
-                radial-gradient(circle at 18% 0%, rgba(23, 199, 212, 0.18), transparent 36%),
-                linear-gradient(135deg, rgba(29, 117, 255, 0.14), rgba(124, 58, 237, 0.08) 50%, rgba(23, 199, 212, 0.1)),
-                linear-gradient(180deg, rgba(17, 29, 48, 0.96), rgba(11, 19, 33, 0.96));
-            backdrop-filter: blur(12px);
-            border-radius: 8px;
-            padding: 0.5rem 0.65rem;
-            margin-bottom: 0.85rem;
-            box-shadow: var(--rag-shadow-soft);
+                radial-gradient(circle at left top, rgba(23, 199, 212, 0.2), transparent 32%),
+                radial-gradient(circle at right top, rgba(124, 58, 237, 0.16), transparent 36%),
+                linear-gradient(135deg, rgba(12, 33, 58, 0.98), rgba(19, 27, 49, 0.98));
+            backdrop-filter: blur(16px);
+            border-radius: 12px;
+            padding: 0.62rem 0.78rem;
+            margin-bottom: 1rem;
+            box-shadow: 0 18px 42px rgba(0, 0, 0, 0.24);
             animation: ragFadeLift 360ms ease both;
         }
 
         .st-key-top_bar [data-testid="stHorizontalBlock"] {
             align-items: center;
+            gap: 0.85rem;
         }
 
         .st-key-top_bar .stButton > button {
-            width: 2.5rem !important;
-            min-width: 2.5rem !important;
-            max-width: 2.5rem !important;
-            min-height: 2.5rem;
-            border-radius: 6px;
+            width: 3.15rem !important;
+            min-width: 3.15rem !important;
+            max-width: 3.15rem !important;
+            min-height: 3.05rem;
+            border-radius: 12px !important;
+            border-color: rgba(91, 140, 255, 0.32) !important;
+            background: rgba(8, 17, 31, 0.68) !important;
             padding-left: 0;
             padding-right: 0;
             justify-content: center;
+            box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+        }
+
+        .st-key-top_bar .stButton > button:hover {
+            background: rgba(23, 199, 212, 0.14) !important;
+            border-color: rgba(23, 199, 212, 0.55) !important;
+            box-shadow: 0 14px 30px rgba(23, 199, 212, 0.14);
         }
 
         .st-key-top_bar .stButton > button p,
@@ -850,18 +860,19 @@ def inject_enterprise_styles() -> None:
 
         .st-key-navigation_mode_cycle button {
             font-size: 0 !important;
-            width: 2.5rem !important;
+            width: 3.15rem !important;
         }
 
         .st-key-navigation_mode_cycle button::before {
             content: "";
             display: block;
-            width: 1.05rem;
-            height: 0.72rem;
+            width: 1.38rem;
+            height: 1rem;
             background:
-                linear-gradient(var(--rag-text), var(--rag-text)) 0 0 / 100% 2px no-repeat,
-                linear-gradient(var(--rag-text), var(--rag-text)) 0 50% / 100% 2px no-repeat,
-                linear-gradient(var(--rag-text), var(--rag-text)) 0 100% / 100% 2px no-repeat;
+                linear-gradient(var(--rag-text), var(--rag-text)) 0 0 / 100% 2.5px no-repeat,
+                linear-gradient(var(--rag-text), var(--rag-text)) 0 50% / 100% 2.5px no-repeat,
+                linear-gradient(var(--rag-text), var(--rag-text)) 0 100% / 100% 2.5px no-repeat;
+            opacity: 0.94;
         }
 
         .st-key-navigation_mode_cycle button span {
@@ -869,8 +880,12 @@ def inject_enterprise_styles() -> None:
         }
 
         .st-key-top_bar [data-testid="stSelectbox"] {
-            min-width: 13rem;
-            max-width: 19rem;
+            min-width: 19rem;
+            max-width: 22rem;
+        }
+
+        .st-key-top_bar [data-testid="stSelectbox"] > div {
+            margin-bottom: 0;
         }
 
         .st-key-top_bar [data-testid="stSelectbox"] label {
@@ -878,14 +893,33 @@ def inject_enterprise_styles() -> None:
         }
 
         .st-key-top_bar [data-baseweb="select"] > div {
-            min-height: 2.5rem;
-            border-radius: 8px;
-            background: rgba(28, 36, 48, 0.92) !important;
-            border-color: var(--rag-border);
-            font-size: 0.82rem;
-            font-weight: 700;
+            min-height: 3.05rem;
+            border-radius: 13px !important;
+            background:
+                linear-gradient(135deg, rgba(29, 117, 255, 0.12), rgba(23, 199, 212, 0.06)),
+                rgba(10, 20, 35, 0.94) !important;
+            border: 1px solid rgba(74, 112, 158, 0.7) !important;
+            font-size: 0.9rem;
+            font-weight: 800;
             position: relative;
-            padding-right: 0.25rem;
+            padding-left: 0.2rem;
+            padding-right: 0.45rem;
+            box-shadow:
+                inset 0 1px 0 rgba(255, 255, 255, 0.06),
+                0 12px 26px rgba(0, 0, 0, 0.14);
+            transition: border-color 160ms ease, background 160ms ease, box-shadow 160ms ease;
+        }
+
+        .st-key-top_bar [data-baseweb="select"] > div:hover {
+            border-color: rgba(23, 199, 212, 0.62) !important;
+            background:
+                linear-gradient(135deg, rgba(29, 117, 255, 0.16), rgba(23, 199, 212, 0.08)),
+                rgba(13, 26, 45, 0.98) !important;
+        }
+
+        .st-key-top_bar [data-baseweb="select"] svg {
+            color: var(--rag-text);
+            opacity: 0.9;
         }
 
         [data-testid="stExpander"] details > summary {
@@ -917,17 +951,17 @@ def inject_enterprise_styles() -> None:
         .topbar-brand {
             display: flex;
             align-items: center;
-            gap: 0.75rem;
-            min-height: 2.5rem;
+            gap: 0.9rem;
+            min-height: 3.05rem;
         }
 
         .topbar-logo {
-            width: 2.45rem;
-            height: 2.45rem;
+            width: 2.85rem;
+            height: 2.85rem;
             display: inline-flex;
             align-items: center;
             justify-content: center;
-            border-radius: 10px;
+            border-radius: 12px;
             border: 1px solid rgba(23, 199, 212, 0.24);
             background: rgba(255, 255, 255, 0.075);
             overflow: hidden;
@@ -935,22 +969,22 @@ def inject_enterprise_styles() -> None:
         }
 
         .topbar-logo img {
-            width: 2.2rem;
-            height: 2.2rem;
+            width: 2.55rem;
+            height: 2.55rem;
             object-fit: contain;
             display: block;
         }
 
         .topbar-product {
             color: var(--rag-text);
-            font-size: 0.98rem;
+            font-size: 1.08rem;
             font-weight: 850;
             line-height: 1.15;
         }
 
         .breadcrumb {
             color: var(--rag-muted);
-            font-size: 0.78rem;
+            font-size: 0.82rem;
             font-weight: 650;
             line-height: 1.25;
             margin-top: 0.08rem;
@@ -962,7 +996,7 @@ def inject_enterprise_styles() -> None:
             justify-content: flex-end;
             gap: 0.4rem;
             flex-wrap: wrap;
-            min-height: 2.5rem;
+            min-height: 3.05rem;
         }
 
         .workspace-nav-shell {
@@ -1017,15 +1051,31 @@ def inject_enterprise_styles() -> None:
         .role-badge {
             display: inline-flex;
             align-items: center;
+            justify-content: center;
             border: 1px solid var(--rag-border);
             background: linear-gradient(135deg, rgba(29, 117, 255, 0.2), rgba(23, 199, 212, 0.12));
             color: var(--rag-text);
             border-radius: 999px;
-            padding: 0.25rem 0.65rem;
+            padding: 0.35rem 0.8rem;
             font-size: 0.78rem;
             font-weight: 700;
             line-height: 1.25;
-            min-height: 2rem;
+            min-height: 2.25rem;
+        }
+
+        .st-key-workspace_sign_out button:hover,
+        .st-key-app_sidebar_sign_out button:hover {
+            color: #fff4f4 !important;
+            border-color: rgba(255, 111, 145, 0.72) !important;
+            background:
+                linear-gradient(135deg, rgba(228, 105, 105, 0.24), rgba(255, 111, 145, 0.14)),
+                rgba(31, 12, 18, 0.92) !important;
+            box-shadow: 0 12px 28px rgba(228, 105, 105, 0.18) !important;
+        }
+
+        .st-key-workspace_sign_out button:hover *,
+        .st-key-app_sidebar_sign_out button:hover * {
+            color: #fff4f4 !important;
         }
 
         .sidebar-section-label {
@@ -2586,7 +2636,7 @@ def conversation_retrieval_query(query: str, documents: dict[str, dict] | None =
 def render_top_bar(selected: str) -> None:
     logo_uri = image_data_uri(str(ADEPTRAG_LOGO_ASSET))
     with st.container(border=True, key="top_bar"):
-        menu_col, breadcrumb_col, actions_col = st.columns([0.045, 0.655, 0.3], gap="small")
+        menu_col, breadcrumb_col, actions_col = st.columns([0.055, 0.615, 0.33], gap="small")
         with menu_col:
             render_navigation_menu()
         with breadcrumb_col:
