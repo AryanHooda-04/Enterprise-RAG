@@ -36,6 +36,19 @@ class TextSegment:
 IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp", ".gif"}
 
 
+def suppress_mupdf_diagnostics(fitz_module) -> None:
+    tools = getattr(fitz_module, "TOOLS", None)
+    if tools is None:
+        return
+    for function_name in ("mupdf_display_errors", "mupdf_display_warnings"):
+        function = getattr(tools, function_name, None)
+        if callable(function):
+            try:
+                function(False)
+            except Exception:
+                pass
+
+
 def safe_filename(filename: str | None) -> str:
     base = Path(filename or "document").name
     cleaned = re.sub(r"[^A-Za-z0-9._-]+", "_", base).strip("._")
@@ -311,6 +324,7 @@ def _load_pdf_visual_segments(file_path: Path, active_settings: Settings) -> lis
         logger.info("PyMuPDF is unavailable for PDF page rendering; using embedded image fallback: %s", exc)
         return _load_pdf_embedded_image_segments(file_path, active_settings)
 
+    suppress_mupdf_diagnostics(fitz)
     segments: list[TextSegment] = []
     visual_count = 0
 

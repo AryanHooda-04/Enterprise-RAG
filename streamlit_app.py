@@ -126,6 +126,18 @@ DEMO_LIMIT_DEFAULTS = {
     "demo_max_docx_images": 20,
 }
 
+DEMO_LIMIT_MINIMUMS = {
+    "demo_daily_call_limit": 500,
+    "demo_daily_token_limit": 10_000_000,
+    "demo_session_call_limit": 50,
+    "demo_max_upload_files": 10,
+    "demo_max_upload_size_mb": 25,
+    "demo_max_top_k": 10,
+    "demo_max_evaluation_cases": 20,
+    "demo_max_visual_pages": 20,
+    "demo_max_docx_images": 20,
+}
+
 
 @lru_cache(maxsize=4)
 def image_data_uri(path_value: str) -> str:
@@ -326,7 +338,7 @@ def render_identity_controls() -> None:
     if settings.auth_enabled:
         st.sidebar.write(f"Signed in as `{st.session_state.username or current_role().lower()}`")
         st.sidebar.write(f"Role: `{current_role()}`")
-        if st.sidebar.button("Sign out", use_container_width=True):
+        if st.sidebar.button("Sign out", width="stretch"):
             sign_out_current_user()
             st.rerun()
         return
@@ -482,7 +494,7 @@ def render_login_page() -> None:
             with st.form("login_form", clear_on_submit=False):
                 username = st.text_input("Username", placeholder="admin or user")
                 password = st.text_input("Password", type="password", placeholder="admin or user")
-                submitted = st.form_submit_button("Sign in", type="primary", use_container_width=True)
+                submitted = st.form_submit_button("Sign in", type="primary", width="stretch")
 
             st.markdown(
                 '<div class="login-demo-note">Demo credentials: <strong>admin/admin</strong> or <strong>user/user</strong></div>',
@@ -1776,7 +1788,16 @@ def compact_error_detail(exc: BaseException, max_length: int = 280) -> str:
 
 
 def demo_setting(active_settings, name: str):
-    return getattr(active_settings, name, getattr(settings, name, DEMO_LIMIT_DEFAULTS[name]))
+    value = getattr(active_settings, name, getattr(settings, name, DEMO_LIMIT_DEFAULTS[name]))
+    if name not in DEMO_LIMIT_MINIMUMS:
+        return value
+    try:
+        numeric_value = int(value)
+    except (TypeError, ValueError):
+        return DEMO_LIMIT_MINIMUMS[name]
+    if numeric_value <= 0:
+        return numeric_value
+    return max(numeric_value, DEMO_LIMIT_MINIMUMS[name])
 
 
 def demo_limits_enabled(active_settings=settings) -> bool:
@@ -2228,10 +2249,10 @@ def render_feedback_controls(
         st.rerun()
 
     with col_a:
-        if st.button("Good answer", key=f"{feedback_key}_up", use_container_width=True):
+        if st.button("Good answer", key=f"{feedback_key}_up", width="stretch"):
             submit("up")
     with col_b:
-        if st.button("Bad retrieval", key=f"{feedback_key}_down", use_container_width=True):
+        if st.button("Bad retrieval", key=f"{feedback_key}_down", width="stretch"):
             submit("down")
 
 
@@ -2517,7 +2538,7 @@ def render_workspace_nav(selected: str) -> None:
 
         if settings.auth_enabled:
             with action_col:
-                if st.button("Sign out", key="workspace_sign_out", use_container_width=True):
+                if st.button("Sign out", key="workspace_sign_out", width="stretch"):
                     sign_out_current_user()
                     st.rerun()
 
@@ -2540,7 +2561,7 @@ def render_app_sidebar(selected: str) -> str:
         )
         if settings.auth_enabled:
             st.caption(f"Signed in as {st.session_state.username or current_role().lower()} - {current_role()}")
-            if st.button("Sign out", key="app_sidebar_sign_out", use_container_width=True):
+            if st.button("Sign out", key="app_sidebar_sign_out", width="stretch"):
                 sign_out_current_user()
                 st.rerun()
             st.divider()
@@ -2555,7 +2576,7 @@ def render_app_sidebar(selected: str) -> str:
                 if st.button(
                     item,
                     key=f"app_side_nav_{item}",
-                    use_container_width=True,
+                    width="stretch",
                     type=button_type,
                 ):
                     st.session_state.nav_selection = item
@@ -2571,7 +2592,7 @@ def render_app_sidebar(selected: str) -> str:
         st.caption(f"Chat: {active_chat_model()}")
         st.caption(f"Vision: {active_vision_model()}")
 
-        if st.button("Refresh index", key="app_side_refresh", use_container_width=True):
+        if st.button("Refresh index", key="app_side_refresh", width="stretch"):
             get_pipeline.clear()
             get_vector_store.clear()
             st.rerun()
@@ -2631,20 +2652,42 @@ def citation_filename(metadata: dict, suffix: str = "txt") -> str:
 
 
 def source_metadata_rows(metadata: dict) -> list[dict]:
+    def display_value(value: object) -> str:
+        if value is None or value == "":
+            return "N/A"
+        if isinstance(value, bytes):
+            return value.decode("utf-8", errors="replace")
+        if isinstance(value, float):
+            return f"{value:.4g}"
+        return str(value)
+
     return [
-        {"Field": "Document", "Value": metadata.get("file_name") or "Unknown"},
-        {"Field": "Page", "Value": metadata.get("page_number") or "N/A"},
-        {"Field": "Source type", "Value": metadata.get("source_type") or "text"},
-        {"Field": "Image", "Value": metadata.get("image_index") or "N/A"},
-        {"Field": "Chunk", "Value": metadata.get("chunk_index")},
-        {"Field": "Similarity", "Value": metadata.get("score")},
-        {"Field": "Token start", "Value": metadata.get("token_start")},
-        {"Field": "Token count", "Value": metadata.get("token_count")},
-        {"Field": "Embedding model", "Value": metadata.get("embedding_model")},
-        {"Field": "Retrieval", "Value": metadata.get("retrieval_method") or "semantic"},
-        {"Field": "Semantic score", "Value": metadata.get("semantic_score")},
-        {"Field": "Keyword score", "Value": metadata.get("keyword_score")},
+        {"Field": "Document", "Value": display_value(metadata.get("file_name") or "Unknown")},
+        {"Field": "Page", "Value": display_value(metadata.get("page_number") or "N/A")},
+        {"Field": "Source type", "Value": display_value(metadata.get("source_type") or "text")},
+        {"Field": "Image", "Value": display_value(metadata.get("image_index") or "N/A")},
+        {"Field": "Chunk", "Value": display_value(metadata.get("chunk_index"))},
+        {"Field": "Similarity", "Value": display_value(metadata.get("score"))},
+        {"Field": "Token start", "Value": display_value(metadata.get("token_start"))},
+        {"Field": "Token count", "Value": display_value(metadata.get("token_count"))},
+        {"Field": "Embedding model", "Value": display_value(metadata.get("embedding_model"))},
+        {"Field": "Retrieval", "Value": display_value(metadata.get("retrieval_method") or "semantic")},
+        {"Field": "Semantic score", "Value": display_value(metadata.get("semantic_score"))},
+        {"Field": "Keyword score", "Value": display_value(metadata.get("keyword_score"))},
     ]
+
+
+def suppress_mupdf_diagnostics(fitz_module) -> None:
+    tools = getattr(fitz_module, "TOOLS", None)
+    if tools is None:
+        return
+    for function_name in ("mupdf_display_errors", "mupdf_display_warnings"):
+        function = getattr(tools, function_name, None)
+        if callable(function):
+            try:
+                function(False)
+            except Exception:
+                pass
 
 
 @st.cache_data(show_spinner=False)
@@ -2652,6 +2695,7 @@ def pdf_page_preview_bytes(path_text: str, page_number: int, modified_at: float)
     del modified_at
     import fitz
 
+    suppress_mupdf_diagnostics(fitz)
     with fitz.open(path_text) as document:
         if len(document) == 0:
             raise RAGApplicationError("PDF has no pages to preview.")
@@ -2677,13 +2721,13 @@ def render_source_preview(metadata: dict, runtime_settings) -> None:
                 page_number,
                 source_path.stat().st_mtime,
             )
-            st.image(preview, caption=f"{source_path.name} - page {page_number}", use_container_width=True)
+            st.image(preview, caption=f"{source_path.name} - page {page_number}", width="stretch")
         except Exception as exc:
             st.caption(f"PDF preview unavailable: {exc}")
         return
 
     if suffix in {".png", ".jpg", ".jpeg", ".webp", ".gif"}:
-        st.image(str(source_path), caption=source_path.name, use_container_width=True)
+        st.image(str(source_path), caption=source_path.name, width="stretch")
         return
 
     if suffix == ".txt":
@@ -3706,7 +3750,7 @@ def render_sidebar() -> str:
             if st.sidebar.button(
                 item,
                 key=f"nav_{item}",
-                use_container_width=True,
+                width="stretch",
                 type=button_type,
                 disabled=disabled,
             ):
@@ -3726,12 +3770,12 @@ def render_sidebar() -> str:
     render_demo_limit_status(active_settings())
     st.sidebar.divider()
 
-    if st.sidebar.button("Refresh local index", use_container_width=True):
+    if st.sidebar.button("Refresh local index", width="stretch"):
         get_pipeline.clear()
         get_vector_store.clear()
         st.rerun()
 
-    if st.sidebar.button("Test OpenAI connection", use_container_width=True):
+    if st.sidebar.button("Test OpenAI connection", width="stretch"):
         try:
             runtime_settings = active_settings()
             if require_demo_budget("OpenAI connection test", active_settings=runtime_settings):
@@ -3752,13 +3796,13 @@ def render_dashboard() -> None:
     render_metric_grid()
 
     action_col_a, action_col_b, action_col_c = st.columns([1, 1, 1], gap="small")
-    if action_col_a.button("Ask a question", key="dashboard_go_ask", type="primary", use_container_width=True):
+    if action_col_a.button("Ask a question", key="dashboard_go_ask", type="primary", width="stretch"):
         st.session_state.nav_selection = "Ask"
         st.rerun()
-    if action_col_b.button("Open conversation", key="dashboard_go_conversation", use_container_width=True):
+    if action_col_b.button("Open conversation", key="dashboard_go_conversation", width="stretch"):
         st.session_state.nav_selection = "Conversation"
         st.rerun()
-    if is_admin() and action_col_c.button("Upload documents", key="dashboard_go_ingestion", use_container_width=True):
+    if is_admin() and action_col_c.button("Upload documents", key="dashboard_go_ingestion", width="stretch"):
         st.session_state.nav_selection = "Ingestion"
         st.rerun()
 
@@ -3767,7 +3811,7 @@ def render_dashboard() -> None:
         st.subheader("Indexed Documents")
         rows = document_rows()
         if rows:
-            st.dataframe(rows[:8], hide_index=True, use_container_width=True)
+            st.dataframe(rows[:8], hide_index=True, width="stretch")
         else:
             st.info("No documents indexed for the current embedding model.")
 
@@ -3905,7 +3949,7 @@ def render_ingestion() -> None:
         st.error(f"Select {upload_file_limit} documents or fewer per demo batch.")
 
     upload_action_col, _ = st.columns([1, 2])
-    if upload_action_col.button("Add to queue", type="primary", disabled=start_disabled, use_container_width=True):
+    if upload_action_col.button("Add to queue", type="primary", disabled=start_disabled, width="stretch"):
         added_to_queue, failures = enqueue_uploaded_files(
             uploaded_files,
             int(chunk_size),
@@ -3934,7 +3978,7 @@ def render_ingestion() -> None:
     render_ingestion_steps(active_ingestion_step)
 
     queue_col_b, queue_col_c = st.columns([1, 1])
-    if queue_col_b.button("Start queue", disabled=queued_count == 0, use_container_width=True):
+    if queue_col_b.button("Start queue", disabled=queued_count == 0, width="stretch"):
         summary = process_ingestion_queue(runtime_settings)
         summary = {
             "time": datetime.now().strftime("%H:%M:%S"),
@@ -3942,7 +3986,7 @@ def render_ingestion() -> None:
         }
         st.session_state.last_ingestion = summary
 
-    if queue_col_c.button("Retry failed", disabled=failed_count == 0, use_container_width=True):
+    if queue_col_c.button("Retry failed", disabled=failed_count == 0, width="stretch"):
         for item in st.session_state.ingestion_queue:
             if item.get("status") == "failed":
                 item["status"] = "queued"
@@ -3951,9 +3995,9 @@ def render_ingestion() -> None:
 
     if st.session_state.ingestion_queue:
         st.subheader("Processing Queue")
-        st.dataframe(queue_rows(), hide_index=True, use_container_width=True)
+        st.dataframe(queue_rows(), hide_index=True, width="stretch")
         clear_col_a, clear_col_b = st.columns([1, 3])
-        if clear_col_a.button("Clear completed", use_container_width=True):
+        if clear_col_a.button("Clear completed", width="stretch"):
             st.session_state.ingestion_queue = [
                 item for item in st.session_state.ingestion_queue if item.get("status") != "completed"
             ]
@@ -4051,7 +4095,7 @@ def render_answer_sources(
 
             meta_col, action_col = st.columns([1.2, 0.8], gap="large")
             with meta_col:
-                st.dataframe(source_metadata_rows(metadata), hide_index=True, use_container_width=True)
+                st.dataframe(source_metadata_rows(metadata), hide_index=True, width="stretch")
                 st.code(source, language="text")
             with action_col:
                 with st.expander("Preview source", expanded=index == 1):
@@ -4063,7 +4107,7 @@ def render_answer_sources(
                     citation_filename(metadata),
                     "text/plain",
                     key=f"{key_prefix}_source_download_{index}",
-                    use_container_width=True,
+                    width="stretch",
                 )
 
                 source_path = resolve_document_path(metadata.get("file_hash"), runtime_settings)
@@ -4071,14 +4115,14 @@ def render_answer_sources(
                     st.link_button(
                         "Open stored document",
                         source_path.resolve().as_uri(),
-                        use_container_width=True,
+                        width="stretch",
                     )
                     st.download_button(
                         "Download stored document",
                         source_path.read_bytes(),
                         source_path.name,
                         key=f"{key_prefix}_document_download_{index}",
-                        use_container_width=True,
+                        width="stretch",
                     )
                 else:
                     st.caption("Original stored file is not available.")
@@ -4174,7 +4218,7 @@ def render_ask() -> None:
                 unsafe_allow_html=True,
             )
         with action_new:
-            if st.button("New chat", key="ask_new_chat", use_container_width=True):
+            if st.button("New chat", key="ask_new_chat", width="stretch"):
                 reset_ask_chat()
                 st.rerun()
 
@@ -4201,7 +4245,7 @@ def render_ask() -> None:
                 "Send voice question",
                 type="primary",
                 disabled=not voice_prompt.strip(),
-                use_container_width=True,
+                width="stretch",
             )
 
         if not st.session_state.last_ask_result:
@@ -4327,7 +4371,7 @@ def render_ask() -> None:
                 st.dataframe(
                     list(reversed(st.session_state.query_history)),
                     hide_index=True,
-                    use_container_width=True,
+                    width="stretch",
                 )
 
 
@@ -4452,7 +4496,7 @@ def render_conversation() -> None:
                 unsafe_allow_html=True,
             )
         with action_new:
-            if st.button("New chat", key="conversation_new_chat", use_container_width=True):
+            if st.button("New chat", key="conversation_new_chat", width="stretch"):
                 reset_conversation_chat()
                 st.rerun()
         if st.session_state.conversation_messages:
@@ -4462,7 +4506,7 @@ def render_conversation() -> None:
                     conversation_export_markdown(),
                     "rag_conversation.md",
                     "text/markdown",
-                    use_container_width=True,
+                    width="stretch",
                 )
             with action_export_json:
                 st.download_button(
@@ -4470,7 +4514,7 @@ def render_conversation() -> None:
                     json.dumps(st.session_state.conversation_messages, indent=2),
                     "rag_conversation.json",
                     "application/json",
-                    use_container_width=True,
+                    width="stretch",
                 )
 
         if store.is_empty:
@@ -4496,7 +4540,7 @@ def render_conversation() -> None:
                 "Send voice question",
                 type="primary",
                 disabled=not voice_prompt.strip(),
-                use_container_width=True,
+                width="stretch",
             )
 
         if not st.session_state.conversation_messages:
@@ -4764,9 +4808,9 @@ def render_agent() -> None:
         "Run agent",
         type="primary",
         disabled=not active_goal or compare_blocked,
-        use_container_width=True,
+        width="stretch",
     )
-    clear_col.button("Clear", use_container_width=True, on_click=reset_agent_workspace)
+    clear_col.button("Clear", width="stretch", on_click=reset_agent_workspace)
 
     if run_clicked:
         answer_language = response_language(voice_settings["language"], active_goal)
@@ -4840,7 +4884,7 @@ def render_agent() -> None:
         if evidence_df.empty:
             st.info("No evidence was retrieved for this agent run.")
         else:
-            st.dataframe(evidence_df, hide_index=True, use_container_width=True)
+            st.dataframe(evidence_df, hide_index=True, width="stretch")
             chart_df = evidence_df.groupby("Document", as_index=False)["Score"].max()
             fig = px.bar(
                 chart_df,
@@ -4850,7 +4894,7 @@ def render_agent() -> None:
                 range_y=[0, 1],
             )
             fig.update_layout(margin=dict(l=10, r=10, t=46, b=10), height=340)
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, width="stretch")
 
     with report_tab:
         report_markdown = last["report_markdown"]
@@ -4861,14 +4905,14 @@ def render_agent() -> None:
             report_markdown,
             "agentic_rag_report.md",
             "text/markdown",
-            use_container_width=True,
+            width="stretch",
         )
         export_col_b.download_button(
             "Download PDF report",
             agent_pdf_report(report_markdown),
             "agentic_rag_report.pdf",
             "application/pdf",
-            use_container_width=True,
+            width="stretch",
         )
 
     with citations_tab:
@@ -4884,7 +4928,7 @@ def render_agent() -> None:
             st.dataframe(
                 pd.DataFrame(list(reversed(st.session_state.agent_history))),
                 hide_index=True,
-                use_container_width=True,
+                width="stretch",
             )
         else:
             st.caption("No agent runs yet.")
@@ -4990,7 +5034,7 @@ def render_retrieval_audit() -> None:
                     "Preview": item.get("text", "")[:220],
                 }
             )
-        st.dataframe(rows, hide_index=True, use_container_width=True)
+        st.dataframe(rows, hide_index=True, width="stretch")
 
         for index, item in enumerate(filtered, start=1):
             metadata = item.get("metadata", {})
@@ -5025,7 +5069,7 @@ def render_documents() -> None:
         needle = filter_text.strip().lower()
         rows = [row for row in rows if needle in row["Document"].lower()]
 
-    st.dataframe(rows, hide_index=True, use_container_width=True)
+    st.dataframe(rows, hide_index=True, width="stretch")
     csv = "\n".join(
         ["Document,Chunks,Visual chunks,Embedding model,Indexed at"]
         + [
@@ -5069,14 +5113,14 @@ def render_index_management() -> None:
     col_a, col_b = st.columns(2, gap="large")
     with col_a:
         st.subheader("Document Actions")
-        if st.button("Delete selected documents", disabled=not selected_hashes, use_container_width=True):
+        if st.button("Delete selected documents", disabled=not selected_hashes, width="stretch"):
             for file_hash in selected_hashes:
                 store.remove_document(file_hash)
             clear_index_caches()
             st.success(f"Deleted {len(selected_hashes)} document(s).")
             st.rerun()
 
-        if st.button("Re-index selected documents", disabled=not selected_hashes, use_container_width=True):
+        if st.button("Re-index selected documents", disabled=not selected_hashes, width="stretch"):
             successes = 0
             failures: list[str] = []
             for file_hash in selected_hashes:
@@ -5105,7 +5149,7 @@ def render_index_management() -> None:
         migrate_all = st.checkbox("Migrate all documents in current index")
         migration_hashes = list(document_map.keys()) if migrate_all else selected_hashes
 
-        if st.button("Migrate documents", disabled=not migration_hashes, use_container_width=True):
+        if st.button("Migrate documents", disabled=not migration_hashes, width="stretch"):
             successes = 0
             failures: list[str] = []
             for file_hash in migration_hashes:
@@ -5191,7 +5235,7 @@ def render_evaluation() -> None:
 
     with st.container(border=True):
         st.subheader("Test set")
-        if st.button("Reload starter cases", use_container_width=False):
+        if st.button("Reload starter cases", width="content"):
             st.session_state.evaluation_cases = default_evaluation_cases()
             st.session_state.last_evaluation_results = []
             save_evaluation_cases(st.session_state.evaluation_cases, runtime_settings)
@@ -5201,7 +5245,7 @@ def render_evaluation() -> None:
         edited_cases = st.data_editor(
             cases_df,
             num_rows="dynamic",
-            use_container_width=True,
+            width="stretch",
             hide_index=True,
             column_config={
                 "Question": st.column_config.TextColumn("Question", required=True),
@@ -5250,13 +5294,13 @@ def render_evaluation() -> None:
         "Run evaluation",
         type="primary",
         disabled=not cases,
-        use_container_width=True,
+        width="stretch",
     )
-    if save_col.button("Save cases", disabled=not cases, use_container_width=True):
+    if save_col.button("Save cases", disabled=not cases, width="stretch"):
         st.session_state.evaluation_cases = cases
         save_evaluation_cases(cases, runtime_settings)
         st.success("Evaluation test set saved.")
-    if clear_col.button("Clear results", use_container_width=True):
+    if clear_col.button("Clear results", width="stretch"):
         st.session_state.last_evaluation_results = []
         st.rerun()
 
@@ -5335,7 +5379,7 @@ def render_evaluation() -> None:
             ]
         ],
         hide_index=True,
-        use_container_width=True,
+        width="stretch",
     )
 
     chart_df = non_error_df.melt(
@@ -5355,7 +5399,7 @@ def render_evaluation() -> None:
             title="Evaluation Scores by Question",
         )
         fig.update_layout(margin=dict(l=10, r=10, t=46, b=10), height=360)
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width="stretch")
 
     with st.expander("Answers and expected outputs"):
         for row in results:
@@ -5371,14 +5415,14 @@ def render_evaluation() -> None:
         results_df.to_csv(index=False),
         "rag_evaluation.csv",
         "text/csv",
-        use_container_width=True,
+        width="stretch",
     )
     st.download_button(
         "Export evaluation JSON",
         json.dumps(results, ensure_ascii=False, indent=2),
         "rag_evaluation.json",
         "application/json",
-        use_container_width=True,
+        width="stretch",
     )
 
 
@@ -5513,14 +5557,14 @@ def render_admin_analytics_dashboard(runtime_settings) -> None:
             file_type_df = index_df.groupby("File type", as_index=False)["Document"].count()
             fig = px.bar(file_type_df, x="File type", y="Document", title="Documents by File Type")
             fig.update_layout(margin=dict(l=10, r=10, t=46, b=10), height=320)
-            st.plotly_chart(fig, use_container_width=True)
-            st.dataframe(index_df, hide_index=True, use_container_width=True)
+            st.plotly_chart(fig, width="stretch")
+            st.dataframe(index_df, hide_index=True, width="stretch")
         else:
             st.caption("No indexed documents yet.")
 
         if st.session_state.ingestion_queue:
             queue_df = pd.DataFrame(queue_rows())
-            st.dataframe(queue_df, hide_index=True, use_container_width=True)
+            st.dataframe(queue_df, hide_index=True, width="stretch")
         else:
             st.caption("No active ingestion queue.")
 
@@ -5542,13 +5586,13 @@ def render_admin_analytics_dashboard(runtime_settings) -> None:
             )
             fig = px.bar(operation_df, x="Operation", y="Calls", title="Calls by Operation")
             fig.update_layout(margin=dict(l=10, r=10, t=46, b=10), height=320)
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, width="stretch")
 
             trend_df = usage_trend_dataframe(usage_records)
             if not trend_df.empty:
                 fig = px.line(trend_df, x="Date", y="Tokens", color="Operation", markers=True, title="Token Usage Trend")
                 fig.update_layout(margin=dict(l=10, r=10, t=46, b=10), height=320)
-                st.plotly_chart(fig, use_container_width=True)
+                st.plotly_chart(fig, width="stretch")
         else:
             st.caption("No usage events recorded yet.")
 
@@ -5560,8 +5604,8 @@ def render_admin_analytics_dashboard(runtime_settings) -> None:
             )
             fig = px.bar(top_docs_df, x="Mentions", y="Document", orientation="h", title="Top Queried/Cited Documents")
             fig.update_layout(margin=dict(l=10, r=10, t=46, b=10), height=360)
-            st.plotly_chart(fig, use_container_width=True)
-            st.dataframe(top_docs_df, hide_index=True, use_container_width=True)
+            st.plotly_chart(fig, width="stretch")
+            st.dataframe(top_docs_df, hide_index=True, width="stretch")
         else:
             st.caption("No cited document activity yet. Ask questions or collect feedback to populate this chart.")
 
@@ -5569,7 +5613,7 @@ def render_admin_analytics_dashboard(runtime_settings) -> None:
         if not trend_df.empty:
             fig = px.bar(trend_df, x="Date", y="Count", color="Sentiment", title="Feedback Trend")
             fig.update_layout(margin=dict(l=10, r=10, t=46, b=10), height=320)
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, width="stretch")
         else:
             st.caption("No feedback submitted yet.")
 
@@ -5598,7 +5642,7 @@ def render_demo_limits_admin(runtime_settings) -> None:
             st.dataframe(
                 list(reversed(st.session_state.demo_blocked_actions[-25:])),
                 hide_index=True,
-                use_container_width=True,
+                width="stretch",
             )
 
 
@@ -5674,7 +5718,7 @@ def render_administration() -> None:
                     "Documents": len({record.get("document_name") for record in operation_records if record.get("document_name")}),
                 }
             )
-        st.dataframe(operation_rows, hide_index=True, use_container_width=True)
+        st.dataframe(operation_rows, hide_index=True, width="stretch")
 
         recent_usage_rows = [
             {
@@ -5689,20 +5733,20 @@ def render_administration() -> None:
             for record in reversed(usage_records[-30:])
         ]
         with st.expander("Recent usage events"):
-            st.dataframe(recent_usage_rows, hide_index=True, use_container_width=True)
+            st.dataframe(recent_usage_rows, hide_index=True, width="stretch")
         st.download_button(
             "Export usage JSONL",
             usage_jsonl(usage_records),
             "rag_usage.jsonl",
             "application/jsonl",
-            use_container_width=True,
+            width="stretch",
         )
         st.download_button(
             "Export usage CSV",
             usage_csv(usage_records),
             "rag_usage.csv",
             "text/csv",
-            use_container_width=True,
+            width="stretch",
         )
         st.caption("Dollar estimates are intentionally not hardcoded. Use the exported usage with your approved pricing sheet.")
     else:
@@ -5727,20 +5771,20 @@ def render_administration() -> None:
             }
             for record in reversed(feedback_records[-25:])
         ]
-        st.dataframe(preview_rows, hide_index=True, use_container_width=True)
+        st.dataframe(preview_rows, hide_index=True, width="stretch")
         st.download_button(
             "Export feedback JSONL",
             feedback_jsonl(feedback_records),
             "rag_feedback.jsonl",
             "application/jsonl",
-            use_container_width=True,
+            width="stretch",
         )
         st.download_button(
             "Export feedback CSV",
             feedback_csv(feedback_records),
             "rag_feedback.csv",
             "text/csv",
-            use_container_width=True,
+            width="stretch",
         )
     else:
         st.caption("No answer feedback has been submitted yet.")
