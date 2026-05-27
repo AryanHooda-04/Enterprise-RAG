@@ -277,11 +277,14 @@ def settings_for_models(
     resolved_tts_voice = tts_voice or base_settings.openai_tts_voice
     resolved_max_visual_pages = base_settings.max_visual_pages
     resolved_max_docx_images = base_settings.max_docx_images
-    if base_settings.demo_limits_enabled:
-        if base_settings.demo_max_visual_pages > 0:
-            resolved_max_visual_pages = min(base_settings.max_visual_pages, base_settings.demo_max_visual_pages)
-        if base_settings.demo_max_docx_images > 0:
-            resolved_max_docx_images = min(base_settings.max_docx_images, base_settings.demo_max_docx_images)
+    demo_limits_enabled = getattr(base_settings, "demo_limits_enabled", True)
+    demo_max_visual_pages = getattr(base_settings, "demo_max_visual_pages", 5)
+    demo_max_docx_images = getattr(base_settings, "demo_max_docx_images", 5)
+    if demo_limits_enabled:
+        if demo_max_visual_pages > 0:
+            resolved_max_visual_pages = min(base_settings.max_visual_pages, demo_max_visual_pages)
+        if demo_max_docx_images > 0:
+            resolved_max_docx_images = min(base_settings.max_docx_images, demo_max_docx_images)
     index_dir = Path(
         os.getenv(
             "RAG_INDEX_DIR",

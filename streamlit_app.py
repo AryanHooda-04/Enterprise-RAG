@@ -109,6 +109,19 @@ DEFAULT_EVALUATION_CASES = (
     },
 )
 
+DEMO_LIMIT_DEFAULTS = {
+    "demo_limits_enabled": True,
+    "demo_daily_call_limit": 80,
+    "demo_daily_token_limit": 200_000,
+    "demo_session_call_limit": 12,
+    "demo_max_upload_files": 3,
+    "demo_max_upload_size_mb": 10,
+    "demo_max_top_k": 5,
+    "demo_max_evaluation_cases": 5,
+    "demo_max_visual_pages": 5,
+    "demo_max_docx_images": 5,
+}
+
 
 @st.cache_resource
 def get_vector_store(embedding_model: str) -> VectorStore:
@@ -1274,8 +1287,12 @@ def compact_error_detail(exc: BaseException, max_length: int = 280) -> str:
     return message[: max_length - 3] + "..."
 
 
+def demo_setting(active_settings, name: str):
+    return getattr(active_settings, name, getattr(settings, name, DEMO_LIMIT_DEFAULTS[name]))
+
+
 def demo_limits_enabled(active_settings=settings) -> bool:
-    return bool(active_settings.demo_limits_enabled)
+    return bool(demo_setting(active_settings, "demo_limits_enabled"))
 
 
 def usage_record_day(record: dict) -> str:
@@ -1299,9 +1316,9 @@ def demo_usage_status(active_settings=settings) -> dict:
         "daily_calls": len(today_records),
         "daily_tokens": sum(int(record.get("total_tokens") or 0) for record in today_records),
         "session_calls": int(st.session_state.get("demo_session_calls_used", 0) or 0),
-        "daily_call_limit": active_settings.demo_daily_call_limit,
-        "daily_token_limit": active_settings.demo_daily_token_limit,
-        "session_call_limit": active_settings.demo_session_call_limit,
+        "daily_call_limit": int(demo_setting(active_settings, "demo_daily_call_limit")),
+        "daily_token_limit": int(demo_setting(active_settings, "demo_daily_token_limit")),
+        "session_call_limit": int(demo_setting(active_settings, "demo_session_call_limit")),
     }
 
 
@@ -1359,9 +1376,10 @@ def estimated_rag_calls(search_mode: str) -> int:
 
 
 def demo_top_k_limit(active_settings=settings) -> int:
-    if not demo_limits_enabled(active_settings) or active_settings.demo_max_top_k <= 0:
+    demo_max_top_k = int(demo_setting(active_settings, "demo_max_top_k"))
+    if not demo_limits_enabled(active_settings) or demo_max_top_k <= 0:
         return 20
-    return max(1, min(20, active_settings.demo_max_top_k))
+    return max(1, min(20, demo_max_top_k))
 
 
 def demo_top_k_value(active_settings=settings) -> int:
@@ -1379,15 +1397,17 @@ def normalize_demo_top_k_state(key: str, active_settings=settings) -> None:
 
 
 def demo_upload_file_limit(active_settings=settings) -> int:
-    if not demo_limits_enabled(active_settings) or active_settings.demo_max_upload_files <= 0:
+    demo_max_upload_files = int(demo_setting(active_settings, "demo_max_upload_files"))
+    if not demo_limits_enabled(active_settings) or demo_max_upload_files <= 0:
         return active_settings.max_upload_files
-    return max(1, min(active_settings.max_upload_files, active_settings.demo_max_upload_files))
+    return max(1, min(active_settings.max_upload_files, demo_max_upload_files))
 
 
 def demo_upload_size_limit_mb(active_settings=settings) -> int:
-    if not demo_limits_enabled(active_settings) or active_settings.demo_max_upload_size_mb <= 0:
+    demo_max_upload_size_mb = int(demo_setting(active_settings, "demo_max_upload_size_mb"))
+    if not demo_limits_enabled(active_settings) or demo_max_upload_size_mb <= 0:
         return active_settings.max_upload_size_mb
-    return max(1, min(active_settings.max_upload_size_mb, active_settings.demo_max_upload_size_mb))
+    return max(1, min(active_settings.max_upload_size_mb, demo_max_upload_size_mb))
 
 
 def render_demo_limit_status(active_settings=settings) -> None:
@@ -4729,8 +4749,9 @@ def render_evaluation() -> None:
 
     cases = normalize_evaluation_cases(edited_cases.to_dict("records"))
     cases_to_run = cases
-    if demo_limits_enabled(runtime_settings) and runtime_settings.demo_max_evaluation_cases > 0:
-        cases_to_run = cases[: runtime_settings.demo_max_evaluation_cases]
+    demo_max_evaluation_cases = int(demo_setting(runtime_settings, "demo_max_evaluation_cases"))
+    if demo_limits_enabled(runtime_settings) and demo_max_evaluation_cases > 0:
+        cases_to_run = cases[:demo_max_evaluation_cases]
         if len(cases) > len(cases_to_run):
             st.info(
                 f"Public demo mode will run the first {len(cases_to_run)} evaluation case(s). "
@@ -5076,7 +5097,7 @@ def render_demo_limits_admin(runtime_settings) -> None:
     col_a.metric("Session Calls", limit_text(status["session_calls"], status["session_call_limit"]))
     col_b.metric("Daily Calls", limit_text(status["daily_calls"], status["daily_call_limit"]))
     col_c.metric("Daily Tokens", limit_text(status["daily_tokens"], status["daily_token_limit"]))
-    col_d.metric("Max Top K", runtime_settings.demo_max_top_k)
+    col_d.metric("Max Top K", int(demo_setting(runtime_settings, "demo_max_top_k")))
     st.caption(
         "Configured by RAG_DEMO_LIMITS_ENABLED, RAG_DEMO_SESSION_CALL_LIMIT, "
         "RAG_DEMO_DAILY_CALL_LIMIT, RAG_DEMO_DAILY_TOKEN_LIMIT, "
