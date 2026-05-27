@@ -662,10 +662,11 @@ def inject_enterprise_styles() -> None:
             position: relative;
             z-index: 5;
             border-color: rgba(71, 82, 99, 0.76) !important;
-            background: rgba(23, 27, 34, 0.92);
-            backdrop-filter: blur(10px);
+            background:
+                linear-gradient(180deg, rgba(28, 34, 44, 0.95), rgba(18, 23, 31, 0.95));
+            backdrop-filter: blur(12px);
             border-radius: 8px;
-            padding: 0.6rem 0.75rem;
+            padding: 0.5rem 0.65rem;
             margin-bottom: 0.85rem;
             box-shadow: var(--rag-shadow-soft);
         }
@@ -675,9 +676,10 @@ def inject_enterprise_styles() -> None:
         }
 
         .st-key-top_bar .stButton > button {
-            width: 2.6rem;
-            min-width: 2.6rem;
-            min-height: 2.35rem;
+            width: 2.5rem !important;
+            min-width: 2.5rem !important;
+            max-width: 2.5rem !important;
+            min-height: 2.5rem;
             border-radius: 6px;
             padding-left: 0;
             padding-right: 0;
@@ -693,6 +695,7 @@ def inject_enterprise_styles() -> None:
 
         .st-key-navigation_mode_cycle button {
             font-size: 0 !important;
+            width: 2.5rem !important;
         }
 
         .st-key-navigation_mode_cycle button::before {
@@ -712,6 +715,7 @@ def inject_enterprise_styles() -> None:
 
         .st-key-top_bar [data-testid="stSelectbox"] {
             min-width: 13rem;
+            max-width: 19rem;
         }
 
         .st-key-top_bar [data-testid="stSelectbox"] label {
@@ -719,32 +723,14 @@ def inject_enterprise_styles() -> None:
         }
 
         .st-key-top_bar [data-baseweb="select"] > div {
-            min-height: 2.1rem;
-            border-radius: 999px;
-            background: var(--rag-panel-2);
+            min-height: 2.5rem;
+            border-radius: 8px;
+            background: rgba(28, 36, 48, 0.92) !important;
             border-color: var(--rag-border);
-            font-size: 0.78rem;
+            font-size: 0.82rem;
             font-weight: 700;
             position: relative;
-            padding-right: 2.1rem;
-        }
-
-        [data-baseweb="select"] > div {
-            position: relative;
-            padding-right: 2.1rem;
-        }
-
-        [data-baseweb="select"] > div::after {
-            content: "";
-            position: absolute;
-            right: 0.85rem;
-            top: 50%;
-            width: 0.45rem;
-            height: 0.45rem;
-            border-right: 2px solid var(--rag-muted);
-            border-bottom: 2px solid var(--rag-muted);
-            transform: translateY(-65%) rotate(45deg);
-            pointer-events: none;
+            padding-right: 0.25rem;
         }
 
         [data-testid="stExpander"] details > summary {
@@ -778,6 +764,9 @@ def inject_enterprise_styles() -> None:
             font-size: 0.85rem;
             font-weight: 600;
             line-height: 1.25;
+            display: flex;
+            align-items: center;
+            min-height: 2.5rem;
         }
 
         .topbar-actions {
@@ -786,6 +775,7 @@ def inject_enterprise_styles() -> None:
             justify-content: flex-end;
             gap: 0.4rem;
             flex-wrap: wrap;
+            min-height: 2.5rem;
         }
 
         .workspace-nav-shell {
@@ -845,6 +835,7 @@ def inject_enterprise_styles() -> None:
             font-size: 0.78rem;
             font-weight: 700;
             line-height: 1.25;
+            min-height: 2rem;
         }
 
         .sidebar-section-label {
@@ -2260,7 +2251,7 @@ def conversation_retrieval_query(query: str, documents: dict[str, dict] | None =
 
 def render_top_bar(selected: str) -> None:
     with st.container(border=True, key="top_bar"):
-        menu_col, breadcrumb_col, actions_col = st.columns([0.09, 0.61, 0.3], gap="small")
+        menu_col, breadcrumb_col, actions_col = st.columns([0.045, 0.655, 0.3], gap="small")
         with menu_col:
             render_navigation_menu()
         with breadcrumb_col:
@@ -2303,7 +2294,7 @@ def render_navigation_menu() -> None:
         "Navigation layout",
         key="navigation_mode_cycle",
         help=f"Current: {mode}. Click to switch to {next_navigation_mode(mode)}.",
-        use_container_width=True,
+        width="content",
     ):
         st.session_state.navigation_mode = next_navigation_mode(mode)
         st.rerun()
