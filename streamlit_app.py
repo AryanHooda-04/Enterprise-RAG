@@ -115,15 +115,15 @@ DEFAULT_EVALUATION_CASES = (
 
 DEMO_LIMIT_DEFAULTS = {
     "demo_limits_enabled": True,
-    "demo_daily_call_limit": 80,
+    "demo_daily_call_limit": 500,
     "demo_daily_token_limit": 10_000_000,
-    "demo_session_call_limit": 12,
-    "demo_max_upload_files": 3,
-    "demo_max_upload_size_mb": 10,
-    "demo_max_top_k": 5,
-    "demo_max_evaluation_cases": 5,
-    "demo_max_visual_pages": 5,
-    "demo_max_docx_images": 5,
+    "demo_session_call_limit": 50,
+    "demo_max_upload_files": 10,
+    "demo_max_upload_size_mb": 25,
+    "demo_max_top_k": 10,
+    "demo_max_evaluation_cases": 20,
+    "demo_max_visual_pages": 20,
+    "demo_max_docx_images": 20,
 }
 
 

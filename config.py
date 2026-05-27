@@ -214,15 +214,15 @@ class Settings:
     voice_output_enabled: bool = _env_bool("VOICE_OUTPUT_ENABLED", True)
     default_voice_language: str = os.getenv("VOICE_LANGUAGE", "Auto")
     demo_limits_enabled: bool = _env_bool("RAG_DEMO_LIMITS_ENABLED", True)
-    demo_daily_call_limit: int = _env_int("RAG_DEMO_DAILY_CALL_LIMIT", 80)
+    demo_daily_call_limit: int = _env_int("RAG_DEMO_DAILY_CALL_LIMIT", 500)
     demo_daily_token_limit: int = _env_int("RAG_DEMO_DAILY_TOKEN_LIMIT", 10_000_000)
-    demo_session_call_limit: int = _env_int("RAG_DEMO_SESSION_CALL_LIMIT", 12)
-    demo_max_upload_files: int = _env_int("RAG_DEMO_MAX_UPLOAD_FILES", 3)
-    demo_max_upload_size_mb: int = _env_int("RAG_DEMO_MAX_UPLOAD_SIZE_MB", 10)
-    demo_max_top_k: int = _env_int("RAG_DEMO_MAX_TOP_K", 5)
-    demo_max_evaluation_cases: int = _env_int("RAG_DEMO_MAX_EVALUATION_CASES", 5)
-    demo_max_visual_pages: int = _env_int("RAG_DEMO_MAX_VISUAL_PAGES", 5)
-    demo_max_docx_images: int = _env_int("RAG_DEMO_MAX_DOCX_IMAGES", 5)
+    demo_session_call_limit: int = _env_int("RAG_DEMO_SESSION_CALL_LIMIT", 50)
+    demo_max_upload_files: int = _env_int("RAG_DEMO_MAX_UPLOAD_FILES", 10)
+    demo_max_upload_size_mb: int = _env_int("RAG_DEMO_MAX_UPLOAD_SIZE_MB", 25)
+    demo_max_top_k: int = _env_int("RAG_DEMO_MAX_TOP_K", 10)
+    demo_max_evaluation_cases: int = _env_int("RAG_DEMO_MAX_EVALUATION_CASES", 20)
+    demo_max_visual_pages: int = _env_int("RAG_DEMO_MAX_VISUAL_PAGES", 20)
+    demo_max_docx_images: int = _env_int("RAG_DEMO_MAX_DOCX_IMAGES", 20)
 
     data_dir: Path = DEFAULT_DATA_DIR
     upload_dir: Path = Path(os.getenv("RAG_UPLOAD_DIR", DEFAULT_DATA_DIR / "uploads")).resolve()
@@ -278,8 +278,8 @@ def settings_for_models(
     resolved_max_visual_pages = base_settings.max_visual_pages
     resolved_max_docx_images = base_settings.max_docx_images
     demo_limits_enabled = getattr(base_settings, "demo_limits_enabled", True)
-    demo_max_visual_pages = getattr(base_settings, "demo_max_visual_pages", 5)
-    demo_max_docx_images = getattr(base_settings, "demo_max_docx_images", 5)
+    demo_max_visual_pages = getattr(base_settings, "demo_max_visual_pages", 20)
+    demo_max_docx_images = getattr(base_settings, "demo_max_docx_images", 20)
     if demo_limits_enabled:
         if demo_max_visual_pages > 0:
             resolved_max_visual_pages = min(base_settings.max_visual_pages, demo_max_visual_pages)

@@ -323,15 +323,15 @@ All values are environment-driven. Common settings:
 | `VOICE_OUTPUT_ENABLED` | `true` | Enable spoken answers by default |
 | `VOICE_LANGUAGE` | `Auto` | Default voice language mode |
 | `RAG_DEMO_LIMITS_ENABLED` | `true` | Enable public Streamlit demo guardrails |
-| `RAG_DEMO_DAILY_CALL_LIMIT` | `80` | Deployment-wide OpenAI call limit per UTC day |
+| `RAG_DEMO_DAILY_CALL_LIMIT` | `500` | Deployment-wide OpenAI call limit per UTC day |
 | `RAG_DEMO_DAILY_TOKEN_LIMIT` | `10000000` | Deployment-wide token budget per UTC day |
-| `RAG_DEMO_SESSION_CALL_LIMIT` | `12` | Per-browser-session demo action limit |
-| `RAG_DEMO_MAX_UPLOAD_FILES` | `3` | Demo upload files allowed per batch |
-| `RAG_DEMO_MAX_UPLOAD_SIZE_MB` | `10` | Demo per-file upload size |
-| `RAG_DEMO_MAX_TOP_K` | `5` | Maximum Top K shown in demo mode |
-| `RAG_DEMO_MAX_EVALUATION_CASES` | `5` | Maximum evaluation cases run in one demo batch |
-| `RAG_DEMO_MAX_VISUAL_PAGES` | `5` | Maximum PDF visual pages processed in demo mode |
-| `RAG_DEMO_MAX_DOCX_IMAGES` | `5` | Maximum DOCX embedded images processed in demo mode |
+| `RAG_DEMO_SESSION_CALL_LIMIT` | `50` | Per-browser-session demo action limit |
+| `RAG_DEMO_MAX_UPLOAD_FILES` | `10` | Demo upload files allowed per batch |
+| `RAG_DEMO_MAX_UPLOAD_SIZE_MB` | `25` | Demo per-file upload size |
+| `RAG_DEMO_MAX_TOP_K` | `10` | Maximum Top K shown in demo mode |
+| `RAG_DEMO_MAX_EVALUATION_CASES` | `20` | Maximum evaluation cases run in one demo batch |
+| `RAG_DEMO_MAX_VISUAL_PAGES` | `20` | Maximum PDF visual pages processed in demo mode |
+| `RAG_DEMO_MAX_DOCX_IMAGES` | `20` | Maximum DOCX embedded images processed in demo mode |
 | `RAG_DATA_DIR` | `data` | Local upload/index storage |
 | `RAG_FEEDBACK_PATH` | `data/feedback.jsonl` | Local answer feedback store |
 | `RAG_USAGE_PATH` | `data/usage.jsonl` | Local usage and cost-tracking event store |
