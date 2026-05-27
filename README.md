@@ -12,7 +12,7 @@ locally in FAISS, and answers questions using retrieved context.
 Access the deployed Streamlit Community Cloud app here:
 
 ```text
-https://enterprise-rag-vbhjbfxe6xrewsvnudhuoi.streamlit.app/
+https://adeptrag.streamlit.app/
 ```
 
 ## Walkthrough
