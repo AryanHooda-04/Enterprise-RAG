@@ -820,22 +820,35 @@ def inject_enterprise_styles() -> None:
                 linear-gradient(135deg, rgba(12, 33, 58, 0.98), rgba(19, 27, 49, 0.98));
             backdrop-filter: blur(16px);
             border-radius: 12px;
-            padding: 0.62rem 0.78rem;
+            padding: 0.72rem 0.82rem;
             margin-bottom: 1rem;
             box-shadow: 0 18px 42px rgba(0, 0, 0, 0.24);
             animation: ragFadeLift 360ms ease both;
+            overflow: hidden;
         }
 
         .st-key-top_bar [data-testid="stHorizontalBlock"] {
             align-items: center;
-            gap: 0.85rem;
+            gap: 0.75rem;
+        }
+
+        .st-key-top_bar [data-testid="stColumn"],
+        .st-key-top_bar [data-testid="stElementContainer"] {
+            min-width: 0;
+            display: flex;
+            align-items: center;
+        }
+
+        .st-key-top_bar [data-testid="stElementContainer"],
+        .st-key-top_bar [data-testid="stMarkdown"] {
+            margin-bottom: 0 !important;
         }
 
         .st-key-top_bar .stButton > button {
-            width: 3.15rem !important;
-            min-width: 3.15rem !important;
-            max-width: 3.15rem !important;
-            min-height: 3.05rem;
+            width: 3.25rem !important;
+            min-width: 3.25rem !important;
+            max-width: 3.25rem !important;
+            min-height: 3.1rem;
             border-radius: 12px !important;
             border-color: rgba(91, 140, 255, 0.32) !important;
             background: rgba(8, 17, 31, 0.68) !important;
@@ -860,7 +873,7 @@ def inject_enterprise_styles() -> None:
 
         .st-key-navigation_mode_cycle button {
             font-size: 0 !important;
-            width: 3.15rem !important;
+            width: 3.25rem !important;
         }
 
         .st-key-navigation_mode_cycle button::before {
@@ -880,11 +893,16 @@ def inject_enterprise_styles() -> None:
         }
 
         .st-key-top_bar [data-testid="stSelectbox"] {
-            min-width: 19rem;
-            max-width: 22rem;
+            width: 100%;
+            min-width: 0;
+            max-width: 20.5rem;
+            margin-left: auto;
         }
 
-        .st-key-top_bar [data-testid="stSelectbox"] > div {
+        .st-key-top_bar [data-testid="stSelectbox"] > div,
+        .st-key-top_bar [data-baseweb="select"] {
+            width: 100%;
+            min-width: 0;
             margin-bottom: 0;
         }
 
@@ -893,6 +911,9 @@ def inject_enterprise_styles() -> None:
         }
 
         .st-key-top_bar [data-baseweb="select"] > div {
+            width: 100%;
+            min-width: 0;
+            max-width: 100%;
             min-height: 3.05rem;
             border-radius: 13px !important;
             background:
@@ -907,6 +928,8 @@ def inject_enterprise_styles() -> None:
             box-shadow:
                 inset 0 1px 0 rgba(255, 255, 255, 0.06),
                 0 12px 26px rgba(0, 0, 0, 0.14);
+            box-sizing: border-box;
+            overflow: hidden;
             transition: border-color 160ms ease, background 160ms ease, box-shadow 160ms ease;
         }
 
@@ -920,6 +943,12 @@ def inject_enterprise_styles() -> None:
         .st-key-top_bar [data-baseweb="select"] svg {
             color: var(--rag-text);
             opacity: 0.9;
+        }
+
+        .st-key-top_bar [data-baseweb="select"] span,
+        .st-key-top_bar [data-baseweb="select"] div {
+            white-space: nowrap;
+            text-overflow: ellipsis;
         }
 
         [data-testid="stExpander"] details > summary {
@@ -952,7 +981,8 @@ def inject_enterprise_styles() -> None:
             display: flex;
             align-items: center;
             gap: 0.9rem;
-            min-height: 3.05rem;
+            min-height: 3.1rem;
+            min-width: 0;
         }
 
         .topbar-logo {
@@ -980,6 +1010,7 @@ def inject_enterprise_styles() -> None:
             font-size: 1.08rem;
             font-weight: 850;
             line-height: 1.15;
+            white-space: nowrap;
         }
 
         .breadcrumb {
@@ -988,6 +1019,9 @@ def inject_enterprise_styles() -> None:
             font-weight: 650;
             line-height: 1.25;
             margin-top: 0.08rem;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
         }
 
         .topbar-actions {
@@ -995,8 +1029,9 @@ def inject_enterprise_styles() -> None:
             align-items: center;
             justify-content: flex-end;
             gap: 0.4rem;
-            flex-wrap: wrap;
-            min-height: 3.05rem;
+            flex-wrap: nowrap;
+            min-height: 3.1rem;
+            width: 100%;
         }
 
         .workspace-nav-shell {
@@ -1017,18 +1052,26 @@ def inject_enterprise_styles() -> None:
         }
 
         .st-key-workspace_nav {
-            margin-bottom: 1.35rem;
-            padding: 0.48rem 0.6rem;
-            border-color: rgba(71, 82, 99, 0.7) !important;
+            margin: 0.85rem 0 1.45rem;
+            padding: 0.62rem;
+            border-color: rgba(74, 112, 158, 0.55) !important;
             background:
-                linear-gradient(135deg, rgba(91, 140, 255, 0.08), rgba(53, 194, 124, 0.045), rgba(255, 122, 122, 0.035)),
-                rgba(23, 27, 34, 0.82);
-            border-radius: 8px;
-            box-shadow: var(--rag-shadow-soft);
+                radial-gradient(circle at left top, rgba(23, 199, 212, 0.09), transparent 34%),
+                linear-gradient(135deg, rgba(23, 31, 45, 0.9), rgba(16, 24, 38, 0.92));
+            border-radius: 16px;
+            box-shadow: 0 14px 34px rgba(0, 0, 0, 0.2);
             animation: ragFadeLift 380ms ease both;
         }
 
         .st-key-workspace_nav [data-testid="stHorizontalBlock"] {
+            align-items: center;
+            gap: 0.75rem;
+        }
+
+        .st-key-workspace_nav [data-testid="stColumn"],
+        .st-key-workspace_nav [data-testid="stElementContainer"] {
+            min-width: 0;
+            display: flex;
             align-items: center;
         }
 
@@ -1036,16 +1079,68 @@ def inject_enterprise_styles() -> None:
         .st-key-workspace_nav button p {
             white-space: nowrap;
             word-break: keep-all;
+            text-align: center;
         }
 
-        .st-key-workspace_nav [data-testid="stSegmentedControl"] {
+        .st-key-workspace_nav [data-testid="stButtonGroup"] {
             width: 100%;
+            min-width: 0;
+            display: flex;
+            gap: 0.34rem;
+            padding: 0.28rem;
+            border: 1px solid rgba(74, 112, 158, 0.42);
+            border-radius: 999px;
+            background: rgba(8, 17, 31, 0.58);
+            box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.045);
         }
 
-        [data-testid="stSegmentedControl"] button {
-            border-radius: 6px !important;
-            min-height: 2.35rem;
-            font-weight: 700;
+        .st-key-workspace_nav [data-testid="stButtonGroup"] > div {
+            flex: 1 1 0;
+            min-width: 0;
+        }
+
+        .st-key-workspace_nav button[data-testid="stBaseButton-segmented_control"],
+        .st-key-workspace_nav button[data-testid="stBaseButton-segmented_controlActive"] {
+            width: 100%;
+            min-height: 2.45rem;
+            justify-content: center;
+            border-radius: 999px !important;
+            border: 1px solid transparent !important;
+            background: transparent !important;
+            box-shadow: none !important;
+            color: var(--rag-muted) !important;
+            font-weight: 800;
+            transition:
+                background 160ms ease,
+                border-color 160ms ease,
+                color 160ms ease,
+                transform 160ms ease,
+                box-shadow 160ms ease;
+        }
+
+        .st-key-workspace_nav button[data-testid="stBaseButton-segmented_control"] p,
+        .st-key-workspace_nav button[data-testid="stBaseButton-segmented_controlActive"] p {
+            color: inherit !important;
+            font-size: 0.88rem;
+            line-height: 1.1;
+        }
+
+        .st-key-workspace_nav button[data-testid="stBaseButton-segmented_control"]:hover {
+            background: rgba(255, 255, 255, 0.055) !important;
+            border-color: rgba(74, 112, 158, 0.32) !important;
+            color: var(--rag-text) !important;
+            transform: translateY(-1px);
+        }
+
+        .st-key-workspace_nav button[data-testid="stBaseButton-segmented_controlActive"] {
+            background:
+                linear-gradient(135deg, rgba(29, 117, 255, 0.32), rgba(23, 199, 212, 0.16)),
+                rgba(18, 38, 68, 0.9) !important;
+            border-color: rgba(23, 199, 212, 0.5) !important;
+            color: #f7fbff !important;
+            box-shadow:
+                0 10px 24px rgba(23, 199, 212, 0.12),
+                inset 0 1px 0 rgba(255, 255, 255, 0.08) !important;
         }
 
         .role-badge {
@@ -2636,7 +2731,7 @@ def conversation_retrieval_query(query: str, documents: dict[str, dict] | None =
 def render_top_bar(selected: str) -> None:
     logo_uri = image_data_uri(str(ADEPTRAG_LOGO_ASSET))
     with st.container(border=True, key="top_bar"):
-        menu_col, breadcrumb_col, actions_col = st.columns([0.055, 0.615, 0.33], gap="small")
+        menu_col, breadcrumb_col, actions_col = st.columns([0.06, 0.61, 0.33], gap="small")
         with menu_col:
             render_navigation_menu()
         with breadcrumb_col:
@@ -2653,7 +2748,7 @@ def render_top_bar(selected: str) -> None:
                 unsafe_allow_html=True,
             )
         with actions_col:
-            role_col, model_col = st.columns([0.28, 0.72], gap="small")
+            role_col, model_col = st.columns([0.24, 0.76], gap="small")
             with role_col:
                 st.markdown(
                     f"""
@@ -2700,7 +2795,7 @@ def render_workspace_nav(selected: str) -> None:
         st.session_state.nav_selection = selected
 
     with st.container(border=True, key="workspace_nav"):
-        nav_col, action_col = st.columns([1, 0.12], gap="small")
+        nav_col, action_col = st.columns([1, 0.13], gap="small")
         with nav_col:
             chosen = st.segmented_control(
                 "Workspace navigation",
