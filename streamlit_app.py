@@ -80,7 +80,6 @@ APP_ROOT = Path(__file__).resolve().parent
 APP_NAME = "AdeptRAG"
 APP_KIND = "Enterprise Retrieval Toolkit"
 APP_TAGLINE = "Governed document intelligence workspace"
-RAG_VISUAL_ASSET = APP_ROOT / "docs" / "assets" / "rag-knowledge-texture.webp"
 ADEPTRAG_LOGO_ASSET = APP_ROOT / "docs" / "assets" / "adeptrag-logo.png"
 COMPACT_NAV_LABELS = {
     "Retrieval Audit": "Audit",
@@ -548,11 +547,9 @@ def render_login_page() -> None:
 
 
 def inject_enterprise_styles() -> None:
-    visual_uri = image_data_uri(str(RAG_VISUAL_ASSET))
     logo_uri = image_data_uri(str(ADEPTRAG_LOGO_ASSET))
     visual_css = (
         ":root {\n"
-        f'    --rag-visual-image: url("{visual_uri}");\n'
         f'    --rag-logo-image: url("{logo_uri}");\n'
         "}\n"
     )
@@ -592,18 +589,7 @@ def inject_enterprise_styles() -> None:
         }
 
         .stApp::before {
-            content: "";
-            position: fixed;
-            inset: 0;
-            pointer-events: none;
-            z-index: 0;
-            background-image: var(--rag-visual-image);
-            background-repeat: no-repeat;
-            background-position: right -9rem top 4rem;
-            background-size: min(68rem, 76vw) auto;
-            opacity: 0.16;
-            filter: saturate(1.1);
-            animation: ragAmbientDrift 22s ease-in-out infinite alternate;
+            display: none;
         }
 
         .stApp > header,
@@ -722,8 +708,7 @@ def inject_enterprise_styles() -> None:
             border: 1px solid var(--rag-border);
             background:
                 radial-gradient(circle at top right, rgba(23, 199, 212, 0.18), transparent 38%),
-                linear-gradient(135deg, rgba(10, 22, 38, 0.94), rgba(15, 23, 42, 0.78)),
-                var(--rag-visual-image) center / cover no-repeat;
+                linear-gradient(135deg, rgba(10, 22, 38, 0.96), rgba(15, 23, 42, 0.88));
             border-radius: 8px;
             padding: 1rem;
             margin: 0.25rem 0 0.9rem;
@@ -1105,8 +1090,8 @@ def inject_enterprise_styles() -> None:
             padding: 1.35rem 1.45rem;
             margin-bottom: 1.2rem;
             background:
-                linear-gradient(90deg, rgba(8, 17, 31, 0.98) 0%, rgba(8, 17, 31, 0.86) 48%, rgba(8, 17, 31, 0.68) 100%),
-                var(--rag-visual-image) right center / min(43rem, 48vw) auto no-repeat;
+                radial-gradient(circle at right top, rgba(23, 199, 212, 0.12), transparent 34%),
+                linear-gradient(90deg, rgba(8, 17, 31, 0.98) 0%, rgba(11, 24, 42, 0.92) 58%, rgba(13, 27, 50, 0.86) 100%);
             box-shadow: var(--rag-shadow-soft);
             animation: ragFadeLift 420ms ease both;
         }
@@ -1245,8 +1230,8 @@ def inject_enterprise_styles() -> None:
         .empty-state-panel {
             border: 1px dashed var(--rag-border);
             background:
-                linear-gradient(90deg, rgba(13, 17, 23, 0.88), rgba(13, 17, 23, 0.72)),
-                var(--rag-visual-image) right center / min(38rem, 58vw) auto no-repeat;
+                radial-gradient(circle at right top, rgba(23, 199, 212, 0.1), transparent 35%),
+                linear-gradient(90deg, rgba(13, 17, 23, 0.92), rgba(17, 24, 39, 0.82));
             border-radius: 8px;
             padding: 1.35rem;
             margin: 0.75rem 0 1rem;
@@ -1456,8 +1441,8 @@ def inject_enterprise_styles() -> None:
             border: 1px dashed var(--rag-border);
             border-radius: 8px;
             background:
-                linear-gradient(180deg, rgba(13, 17, 23, 0.86), rgba(13, 17, 23, 0.7)),
-                var(--rag-visual-image) center / cover no-repeat;
+                radial-gradient(circle at center, rgba(23, 199, 212, 0.1), transparent 42%),
+                linear-gradient(180deg, rgba(13, 17, 23, 0.9), rgba(13, 17, 23, 0.78));
             padding: 2rem;
             margin: 1rem 0;
             box-shadow: var(--rag-shadow-soft);
@@ -1829,8 +1814,8 @@ def inject_enterprise_styles() -> None:
             }
             .rag-title {
                 background:
-                    linear-gradient(90deg, rgba(255, 255, 255, 0.96) 0%, rgba(255, 255, 255, 0.88) 52%, rgba(255, 255, 255, 0.72) 100%),
-                    var(--rag-visual-image) right center / min(43rem, 48vw) auto no-repeat;
+                    radial-gradient(circle at right top, rgba(18, 125, 141, 0.08), transparent 34%),
+                    linear-gradient(90deg, rgba(255, 255, 255, 0.96) 0%, rgba(255, 255, 255, 0.9) 58%, rgba(255, 255, 255, 0.84) 100%);
             }
             .rag-title-status {
                 background: rgba(255, 255, 255, 0.72);
@@ -1953,6 +1938,23 @@ def limit_text(used: int, limit: int) -> str:
     return f"{used}/unlimited" if limit <= 0 else f"{used}/{limit}"
 
 
+def compact_number(value: int) -> str:
+    absolute = abs(int(value))
+    if absolute >= 1_000_000:
+        formatted = f"{value / 1_000_000:.1f}M"
+    elif absolute >= 1_000:
+        formatted = f"{value / 1_000:.1f}K"
+    else:
+        return str(value)
+    return formatted.replace(".0", "")
+
+
+def compact_limit_text(used: int, limit: int) -> str:
+    if limit <= 0:
+        return f"{compact_number(used)} / unlimited"
+    return f"{compact_number(used)} / {compact_number(limit)}"
+
+
 def demo_limit_reason(action_label: str, estimated_calls: int, active_settings=settings) -> str | None:
     if not demo_limits_enabled(active_settings):
         return None
@@ -2043,9 +2045,9 @@ def render_demo_limit_status(active_settings=settings) -> None:
     status = demo_usage_status(active_settings)
     st.caption(
         "Demo limits: "
-        f"session calls {limit_text(status['session_calls'], status['session_call_limit'])}, "
-        f"daily calls {limit_text(status['daily_calls'], status['daily_call_limit'])}, "
-        f"daily tokens {limit_text(status['daily_tokens'], status['daily_token_limit'])}."
+        f"session {compact_limit_text(status['session_calls'], status['session_call_limit'])}, "
+        f"daily calls {compact_limit_text(status['daily_calls'], status['daily_call_limit'])}, "
+        f"tokens {compact_limit_text(status['daily_tokens'], status['daily_token_limit'])}."
     )
 
 
@@ -5775,17 +5777,10 @@ def render_demo_limits_admin(runtime_settings) -> None:
 
     status = demo_usage_status(runtime_settings)
     col_a, col_b, col_c, col_d = st.columns(4)
-    col_a.metric("Session Calls", limit_text(status["session_calls"], status["session_call_limit"]))
-    col_b.metric("Daily Calls", limit_text(status["daily_calls"], status["daily_call_limit"]))
-    col_c.metric("Daily Tokens", limit_text(status["daily_tokens"], status["daily_token_limit"]))
+    col_a.metric("Session Calls", compact_limit_text(status["session_calls"], status["session_call_limit"]))
+    col_b.metric("Daily Calls", compact_limit_text(status["daily_calls"], status["daily_call_limit"]))
+    col_c.metric("Daily Tokens", compact_limit_text(status["daily_tokens"], status["daily_token_limit"]))
     col_d.metric("Max Top K", int(demo_setting(runtime_settings, "demo_max_top_k")))
-    st.caption(
-        "Configured by RAG_DEMO_LIMITS_ENABLED, RAG_DEMO_SESSION_CALL_LIMIT, "
-        "RAG_DEMO_DAILY_CALL_LIMIT, RAG_DEMO_DAILY_TOKEN_LIMIT, "
-        "RAG_DEMO_MAX_UPLOAD_FILES, RAG_DEMO_MAX_UPLOAD_SIZE_MB, "
-        "RAG_DEMO_MAX_TOP_K, RAG_DEMO_MAX_EVALUATION_CASES, "
-        "RAG_DEMO_MAX_VISUAL_PAGES, and RAG_DEMO_MAX_DOCX_IMAGES."
-    )
     if st.session_state.demo_blocked_actions:
         with st.expander("Blocked demo actions"):
             st.dataframe(
